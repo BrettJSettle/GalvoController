@@ -34,22 +34,30 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 		self.path_pen.setWidth(2)
 		self.setPen(self.path_pen)
 		self.setPath(self.path)
+		self.mouseIsOver = False
 		self.selected = False
+
+	def paint(self, painter, option, *arg):
+		painter.setRenderHint(QtGui.QPainter.Antialiasing)
+		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+
+	def mouseOver(self, pos):
+		self.mouseIsOver = self.path.contains(pos)
+
+	def mousePressEvent(self, ev):
+		self.scene().mousePressEvent(ev)
 
 	def addPoint(self, p):
 		self.path.lineTo(p)
 		self.setPath(self.path)
 		self.update()
 
-	def select(self):
-		self.selected = True
-		self.path_pen.setColor(QtGui.QColor(255, 0, 0))
-		self.setPen(self.path_pen)
-		self.update()
-
-	def deselect(self):
-		self.path_pen.setColor(QtGui.QColor(0, 0, 255))
-		self.selected = False
+	def toggle(self):
+		self.selected = not self.selected
+		if self.selected:
+			self.path_pen.setColor(QtGui.QColor(255, 0, 0))
+		else:
+			self.path_pen.setColor(QtGui.QColor(0, 0, 255))
 		self.setPen(self.path_pen)
 		self.update()
 

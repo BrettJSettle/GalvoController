@@ -3,6 +3,7 @@ import numpy as np
 from PyDAQmx import *
 from PyDAQmx.DAQmxCallBack import *
 from GalvoGraphics import *
+import time
 
 class GalvoScene(QtGui.QGraphicsScene):
 	def __init__(self, **kargs):
@@ -52,16 +53,31 @@ class GalvoScene(QtGui.QGraphicsScene):
 		return p
 
 class ShapeThread(QtCore.QThread):
-	def __init__(self, points, galvo):
+	def __init__(self, galvo, duration=-1):
 		super(ShapeThread, self).__init__()
-		self.points = points
+		self.points = []
 		self.galvo = galvo
 		self.drawing = True
+		self.duration = duration
+
+	def setDuration(self, t=-1):
+		self.duration = t
+
+	def empty(self):
+		return len(self.points) == 0
 
 	def run(self):
-		while self.drawing:
+		start = time.clock()
+		while (self.duration == -1 or time.clock() - start < self.duration) and self.drawing:
 			self.galvo.write_points(self.points)
-		self.terminate()
+		self.drawing = True
+		self.duration = -1
+
+	def setPoints(self, p):
+		self.points = p
+
+	def stop(self):
+		self.drawing = False
 
 class GalvoDriver():
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,

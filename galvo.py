@@ -5,6 +5,7 @@ app = QtGui.QApplication([])
 import time, sys
 from GalvoDriver import *
 from GalvoGraphics import *
+from threading import Timer
 
 def calibrate():
 	global settings
@@ -27,7 +28,7 @@ def calibrate():
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
 	scene.removeItem(aim)
-	ui.keyPressEvent = lambda ev: QMainWindow.keyPressedEvent(ui, ev)
+	ui.keyPressEvent = keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
 	ui.infoLabel.setText('Calibrated, drag crosshair to position laser. Right click to translate crosshair')
 
@@ -49,16 +50,15 @@ def onOpen(ev):
 		print(e)
 
 def onClose(ev):
-	export_settings('settings.p')
+	if ui.actionAutosave.isChecked():
+		export_settings('settings.p')
 	sys.exit(0)
 
 def mousePressEvent(ev):
 	global cur_shape, thread
-	for i in scene.shapes():
-		if i.selected:
-			i.deselect()
-	if thread != None:
-		thread.drawing = False
+
+	if thread.isRunning():	#stop drawing the shape
+		thread.stop()
 
 	if ev.button() == QtCore.Qt.LeftButton:
 		if not scene.crosshair.isVisible():
@@ -67,18 +67,30 @@ def mousePressEvent(ev):
 
 	elif ev.button() == QtCore.Qt.RightButton:
 		pos = ev.scenePos()
-		for i in scene.shapes():
-			if i.contains(pos):
-				shapeSelected(i)
-				return
-		cur_shape = GalvoShape(pos)
-		scene.addItem(cur_shape)
+		toggled = False
+		for sh in scene.shapes():
+			if sh.mouseIsOver:
+				sh.toggle()
+				toggled = True
+			elif int(ev.modifiers()) != QtCore.Qt.ControlModifier and sh.selected:
+				sh.toggle()
+				toggled = True
+		if not toggled:
+			cur_shape = GalvoShape(pos)
+			scene.addItem(cur_shape)
+
+def keyPressEvent(ev):
+	if ev.key() == 16777223:
+		for sh in scene.shapes()[::-1]:
+			if sh.selected:
+				scene.removeItem(sh)
 
 def mouseMoveEvent(ev):
 	if cur_shape != None:
 		cur_shape.addPoint(ev.scenePos())
 	else:
-		pass
+		for sh in scene.shapes():
+			sh.mouseOver(ev.scenePos())
 	GalvoScene.mouseMoveEvent(scene, ev)
 
 def mouseReleaseEvent(ev):
@@ -88,36 +100,51 @@ def mouseReleaseEvent(ev):
 		cur_shape = None
 	GalvoScene.mouseReleaseEvent(scene, ev)
 
-def shapeSelected(shape):
-	global thread
-	shape.select()
-	scene.crosshair.setVisible(not shape.selected)
-	thread = ShapeThread([scene.mapToGalvo(p) for p in shape.rasterPoints()], scene.galvo)
+def startThread():
+	scene.crosshair.setVisible(False)
+	thread.setPoints([scene.mapToGalvo(p) for shape in scene.shapes() if shape.selected for p in shape.rasterPoints()])
 	thread.start()
 
-thread = None
+def stopThread():
+	global thread
+	thread.stop()
+	scene.crosshair.setVisible(True)
+
+def pulse():
+	global thread
+	thread.setDuration(ui.doubleSpinBox.value())
+	startThread()
+
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
 ui.closeEvent = onClose
 ui.showEvent = onOpen
-ui.calibrateButton.pressed.connect(calibrate)
 scene = GalvoScene()
-scene.shapes = lambda : [i for i in scene.items() if isinstance(i, GalvoShape)]
-ui.clearButton.pressed.connect(scene.clear)
-ui.resetButton.pressed.connect(scene.reset)
-ui.closeButton.pressed.connect(ui.close)
+thread = ShapeThread(scene.galvo)
 scene.mousePressEvent = mousePressEvent
 scene.mouseMoveEvent = mouseMoveEvent
 scene.mouseReleaseEvent = mouseReleaseEvent
-mb = ui.menuBar()
-galvoMenu = mb.addMenu('&Galvo')
-galvoMenu.addAction(QtGui.QAction('&Calibrate', galvoMenu, triggered=calibrate))
-galvoMenu.addAction(QtGui.QAction('&Reset Settings', galvoMenu, triggered=scene.reset))
-fileMenu = mb.addMenu('&File')
-fileMenu.addAction(QtGui.QAction('&Import Settings', fileMenu, triggered=lambda : import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)'))))
-fileMenu.addAction(QtGui.QAction('&Export Settings', fileMenu, triggered=lambda : export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)'))))
+scene.shapes = lambda : [i for i in scene.items() if isinstance(i, GalvoShape)]
+ui.keyPressEvent = keyPressEvent
+
 ui.graphicsView.setScene(scene)
 scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
+
+ui.calibrateButton.pressed.connect(calibrate)
+ui.clearButton.pressed.connect(scene.clear)
+ui.resetButton.pressed.connect(scene.reset)
+ui.closeButton.pressed.connect(ui.close)
+ui.manualButton.pressed.connect(startThread)
+ui.manualButton.released.connect(stopThread)
+ui.pulseButton.pressed.connect(pulse)
+ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
+
+ui.actionCalibrate.triggered.connect(calibrate)
+ui.actionReset.triggered.connect(scene.reset)
+ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
+ui.actionImport.triggered.connect(lambda : import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)')))
+ui.actionExport.triggered.connect(lambda : export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)')))
+
 ui.show()
 app.exec_()
