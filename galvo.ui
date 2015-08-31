@@ -31,7 +31,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Drag crosshair to position laser. Right click to relocate freely.</string>
+         <string>Drag crosshair to position laser. Right click to draw ROIs.</string>
         </property>
        </widget>
       </item>

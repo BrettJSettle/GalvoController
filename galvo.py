@@ -100,8 +100,10 @@ def mouseReleaseEvent(ev):
 		cur_shape = None
 	GalvoScene.mouseReleaseEvent(scene, ev)
 
-def startThread():
+def startThread(duration = -1):
 	scene.crosshair.setVisible(False)
+	thread.setDuration(duration)
+	thread.drawing = True
 	thread.setPoints([scene.mapToGalvo(p) for shape in scene.shapes() if shape.selected for p in shape.rasterPoints()])
 	thread.start()
 
@@ -109,11 +111,8 @@ def stopThread():
 	global thread
 	thread.stop()
 	scene.crosshair.setVisible(True)
-
-def pulse():
-	global thread
-	thread.setDuration(ui.doubleSpinBox.value())
-	startThread()
+	if ui.continuousButton.isChecked():
+		ui.continuousButton.setChecked(False)
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
@@ -136,7 +135,7 @@ ui.resetButton.pressed.connect(scene.reset)
 ui.closeButton.pressed.connect(ui.close)
 ui.manualButton.pressed.connect(startThread)
 ui.manualButton.released.connect(stopThread)
-ui.pulseButton.pressed.connect(pulse)
+ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 
