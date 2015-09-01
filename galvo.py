@@ -36,10 +36,12 @@ def import_settings(fname):
 	with open(fname, 'rb') as f:
 		d = pickle.load(f)
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
+	scene.galvo.setLines({k: False for k in d['lasers']})
 
 def export_settings(fname):
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
-			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height()}
+			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
+			'lasers': scene.galvo.lines.keys()}
 	with open(fname, 'wb') as f:
 		pickle.dump(values, f)
 
@@ -50,6 +52,7 @@ def onOpen(ev):
 		print(e)
 
 def onClose(ev):
+	scene.galvo.deactivateLasers()
 	if ui.actionAutosave.isChecked():
 		export_settings('settings.p')
 	sys.exit(0)
@@ -58,7 +61,7 @@ def mousePressEvent(ev):
 	global cur_shape, thread
 
 	if thread.isRunning():	#stop drawing the shape
-		thread.stop()
+		stopThread()
 
 	if ev.button() == QtCore.Qt.LeftButton:
 		if not scene.crosshair.isVisible():
@@ -104,7 +107,7 @@ def startThread(duration = -1):
 	scene.crosshair.setVisible(False)
 	thread.setDuration(duration)
 	thread.drawing = True
-	thread.setPoints([scene.mapToGalvo(p) for shape in scene.shapes() if shape.selected for p in shape.rasterPoints()])
+	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.shapes() if shape.selected])
 	thread.start()
 
 def stopThread():
@@ -113,6 +116,14 @@ def stopThread():
 	scene.crosshair.setVisible(True)
 	if ui.continuousButton.isChecked():
 		ui.continuousButton.setChecked(False)
+
+def updateLasers():
+	mi, ma = sorted(scene.galvo.lines)
+	li = {mi: ui.laser1Button.isChecked(), ma: ui.laser2Button.isChecked()}
+	scene.galvo.setLines(li)
+
+def configure():
+	pass
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
@@ -138,6 +149,9 @@ ui.manualButton.released.connect(stopThread)
 ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
+ui.laser1Button.toggled.connect(lambda f: updateLasers())
+ui.laser2Button.toggled.connect(lambda f: updateLasers())
+ui.configButton.pressed.connect(configure)
 
 ui.actionCalibrate.triggered.connect(calibrate)
 ui.actionReset.triggered.connect(scene.reset)

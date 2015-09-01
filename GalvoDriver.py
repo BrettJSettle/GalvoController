@@ -69,7 +69,11 @@ class ShapeThread(QtCore.QThread):
 	def run(self):
 		start = time.clock()
 		while (self.duration == -1 or time.clock() - start < self.duration) and self.drawing:
-			self.galvo.write_points(self.points)
+			for shape in self.points:
+				self.galvo.setPos(shape[0])
+				self.galvo.activateLasers()
+				self.galvo.write_points(shape)
+				self.galvo.deactivateLasers()
 		self.drawing = True
 		self.duration = -1
 
@@ -87,6 +91,7 @@ class GalvoDriver():
 		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2 #dummy variable
 		self.read = int32()
+		self.lines = {0: False, 1: False}
 		self.establishChannels()
 		self.pos = QtCore.QPointF()
 		self.update()
@@ -96,8 +101,35 @@ class GalvoDriver():
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		self.analog_output.CreateAOVoltageChan(b'Dev1/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None) #On the NI PCI-6001, AO is on the left side
+		self.analog_output.CreateAOVoltageChan(b'Dev1/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.analog_output.CreateAOVoltageChan(b"Dev1/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.digital_output = Task()
+		self.digital_output.CreateDOChan(b'Dev1/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+
+	def activateLasers(self, lines=[]):
+		if len(lines) == 0:
+			lines = self.lines.keys()
+		for line in lines:
+			self.lines[line] = True
+		self.updateDigital()
+	
+	def deactivateLasers(self, lines=[]):
+		if len(lines) == 0:
+			lines = self.lines.keys()
+		for line in lines:
+			self.lines[line] = False
+		self.updateDigital()
+
+	def setLines(self, lines):
+		self.lines = lines
+		self.updateDigital()
+
+	def updateDigital(self):
+		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
+		for i in self.lines:
+			if self.lines[i]:
+				digital_data[i] = 1
+		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
 
 	def setPos(self, *args):
 		'''accepts percentages using boundRect to assign a new position'''
