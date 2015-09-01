@@ -320,9 +320,6 @@ p, li { white-space: pre-wrap; }
          <property name="checkable">
           <bool>true</bool>
          </property>
-         <property name="checked">
-          <bool>true</bool>
-         </property>
         </widget>
         <widget class="QPushButton" name="laser1Button">
          <property name="geometry">
@@ -436,9 +433,6 @@ p, li { white-space: pre-wrap; }
           <string>Laser 1</string>
          </property>
          <property name="checkable">
-          <bool>true</bool>
-         </property>
-         <property name="checked">
           <bool>true</bool>
          </property>
         </widget>

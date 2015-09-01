@@ -37,7 +37,6 @@ def import_settings(fname):
 		d = pickle.load(f)
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
 	scene.galvo.setLines({k: False for k in d['lasers']})
-	print(d)
 
 def export_settings(fname):
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
@@ -124,10 +123,10 @@ def updateLasers():
 	scene.galvo.setLines(li)
 
 def configure():
-	lold_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
+	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
 	lines = {}
 	for i in range(2):
-		result, ok = QtGui.QInputDialog.getItem(win, "Port Select", "Select the port for Laser 1", ['Line %d' % i for i in range(8)], editable=False)
+		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for Laser 1", ['Line %d' % i for i in range(8)], editable=False)
 		if not ok:
 			lines[old_lines[i]] = False
 		else:
