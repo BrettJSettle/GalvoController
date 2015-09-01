@@ -442,19 +442,6 @@ p, li { white-space: pre-wrap; }
           <bool>true</bool>
          </property>
         </widget>
-        <widget class="QPushButton" name="configButton">
-         <property name="geometry">
-          <rect>
-           <x>0</x>
-           <y>430</y>
-           <width>91</width>
-           <height>23</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Configure Ports</string>
-         </property>
-        </widget>
        </widget>
       </item>
      </layout>
@@ -485,6 +472,8 @@ p, li { white-space: pre-wrap; }
     <addaction name="actionImport"/>
     <addaction name="actionExport"/>
     <addaction name="actionAutosave"/>
+    <addaction name="separator"/>
+    <addaction name="configureAction"/>
    </widget>
    <addaction name="menuGalvo"/>
    <addaction name="menuSettings"/>
@@ -524,6 +513,11 @@ p, li { white-space: pre-wrap; }
   <action name="actionDisconnect">
    <property name="text">
     <string>Disconnect</string>
+   </property>
+  </action>
+  <action name="configureAction">
+   <property name="text">
+    <string>Configure Ports</string>
    </property>
   </action>
  </widget>

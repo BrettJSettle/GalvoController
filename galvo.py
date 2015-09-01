@@ -37,11 +37,12 @@ def import_settings(fname):
 		d = pickle.load(f)
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
 	scene.galvo.setLines({k: False for k in d['lasers']})
+	print(d)
 
 def export_settings(fname):
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
 			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
-			'lasers': scene.galvo.lines.keys()}
+			'lasers': list(scene.galvo.lines.keys())}
 	with open(fname, 'wb') as f:
 		pickle.dump(values, f)
 
@@ -123,7 +124,15 @@ def updateLasers():
 	scene.galvo.setLines(li)
 
 def configure():
-	pass
+	lold_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
+	lines = {}
+	for i in range(2):
+		result, ok = QtGui.QInputDialog.getItem(win, "Port Select", "Select the port for Laser 1", ['Line %d' % i for i in range(8)], editable=False)
+		if not ok:
+			lines[old_lines[i]] = False
+		else:
+			lines[int(result[-1])] = False
+	scene.galvo.setLines(lines)
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
@@ -151,8 +160,8 @@ ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
 ui.laser2Button.toggled.connect(lambda f: updateLasers())
-ui.configButton.pressed.connect(configure)
 
+ui.configureAction.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)
 ui.actionReset.triggered.connect(scene.reset)
 ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
