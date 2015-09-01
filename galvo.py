@@ -126,7 +126,7 @@ def configure():
 	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
 	lines = {}
 	for i in range(2):
-		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for Laser 1", ['Line %d' % i for i in range(8)], editable=False)
+		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for Laser %d. Currently at Line %d" % (i + 1, old_lines[i]), ['Line %d' % i for i in range(8)], editable=False)
 		if not ok:
 			lines[old_lines[i]] = False
 		else:
