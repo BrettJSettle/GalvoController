@@ -2,9 +2,6 @@
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
-  <property name="windowModality">
-   <enum>Qt::WindowModal</enum>
-  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -31,7 +28,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Drag crosshair to position laser. Right click to draw ROIs.</string>
+         <string>Right click drag to position laser. Left click drag to draw ROIs.</string>
         </property>
        </widget>
       </item>
@@ -156,7 +153,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>500</y>
+           <y>490</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -169,7 +166,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>580</y>
+           <y>570</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -182,7 +179,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>540</y>
+           <y>530</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -242,70 +239,6 @@ p, li { white-space: pre-wrap; }
            <height>31</height>
           </rect>
          </property>
-         <property name="palette">
-          <palette>
-           <active>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>0</red>
-               <green>85</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>255</red>
-               <green>170</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </active>
-           <inactive>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>0</red>
-               <green>85</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>255</red>
-               <green>170</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </inactive>
-           <disabled>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>120</red>
-               <green>120</green>
-               <blue>120</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>255</red>
-               <green>170</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </disabled>
-          </palette>
-         </property>
          <property name="font">
           <font>
            <pointsize>10</pointsize>
@@ -314,8 +247,13 @@ p, li { white-space: pre-wrap; }
            <underline>false</underline>
           </font>
          </property>
+         <property name="styleSheet">
+          <string notr="true">QPushButton:checked, QPushButton:pressed {
+	background-color: rgb(255, 0, 0);
+}</string>
+         </property>
          <property name="text">
-          <string>Laser 2</string>
+          <string>450 Guide</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -330,97 +268,6 @@ p, li { white-space: pre-wrap; }
            <height>31</height>
           </rect>
          </property>
-         <property name="palette">
-          <palette>
-           <active>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>0</red>
-               <green>0</green>
-               <blue>255</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>255</red>
-               <green>255</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="HighlightedText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>169</red>
-               <green>255</green>
-               <blue>222</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </active>
-           <inactive>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>0</red>
-               <green>0</green>
-               <blue>255</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>255</red>
-               <green>255</green>
-               <blue>0</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="HighlightedText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>169</red>
-               <green>255</green>
-               <blue>222</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </inactive>
-           <disabled>
-            <colorrole role="ButtonText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>120</red>
-               <green>120</green>
-               <blue>120</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="Highlight">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>51</red>
-               <green>153</green>
-               <blue>255</blue>
-              </color>
-             </brush>
-            </colorrole>
-            <colorrole role="HighlightedText">
-             <brush brushstyle="SolidPattern">
-              <color alpha="255">
-               <red>169</red>
-               <green>255</green>
-               <blue>222</blue>
-              </color>
-             </brush>
-            </colorrole>
-           </disabled>
-          </palette>
-         </property>
          <property name="font">
           <font>
            <pointsize>10</pointsize>
@@ -429,8 +276,13 @@ p, li { white-space: pre-wrap; }
            <underline>false</underline>
           </font>
          </property>
+         <property name="styleSheet">
+          <string notr="true">QPushButton:checked, QPushButton:pressed {
+	background-color: rgb(255, 0, 0);
+}</string>
+         </property>
          <property name="text">
-          <string>Laser 1</string>
+          <string>405 nm</string>
          </property>
          <property name="checkable">
           <bool>true</bool>

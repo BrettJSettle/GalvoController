@@ -6,7 +6,7 @@ class CrossHair(QtGui.QGraphicsObject):
 	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self, parent=None, size=7, color = QtCore.Qt.red, pos=QtCore.QPointF(0, 0)):
 		QtGui.QGraphicsObject.__init__(self, parent)
-		self.setFlag(QtGui.QGraphicsItem.ItemIsMovable)
+		#self.setFlag(QtGui.QGraphicsItem.ItemIsMovable)
 		self.pen = QtGui.QPen(color)
 		self.pen.setWidth(2)
 		self.setZValue(10)
@@ -41,19 +41,19 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
 
-	def mouseOver(self, pos):
-		self.mouseIsOver = self.path.contains(pos)
-
 	def mousePressEvent(self, ev):
 		self.scene().mousePressEvent(ev)
+
+	def mouseOver(self, pos):
+		self.mouseIsOver = self.path.contains(pos)
 
 	def addPoint(self, p):
 		self.path.lineTo(p)
 		self.setPath(self.path)
 		self.update()
 
-	def toggle(self):
-		self.selected = not self.selected
+	def setSelected(self, s):
+		self.selected = s
 		if self.selected:
 			self.path_pen.setColor(QtGui.QColor(255, 0, 0))
 		else:

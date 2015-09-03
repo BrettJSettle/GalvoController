@@ -30,7 +30,7 @@ def calibrate():
 	scene.removeItem(aim)
 	ui.keyPressEvent = keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
-	ui.infoLabel.setText('Calibrated, drag crosshair to position laser. Right click to translate crosshair')
+	ui.infoLabel.setText('Calibrated, right click drag to position laser. Left click drag to translate crosshair')
 
 def import_settings(fname):
 	with open(fname, 'rb') as f:
@@ -60,40 +60,50 @@ def onClose(ev):
 def mousePressEvent(ev):
 	global cur_shape, thread
 
-	if thread.isRunning():	#stop drawing the shape
+	if thread.isRunning():	#clicking interrupts shape drawing
 		stopThread()
 
-	if ev.button() == QtCore.Qt.LeftButton:
+	if ev.button() == QtCore.Qt.RightButton:	#right click drags the laser dot
 		if not scene.crosshair.isVisible():
 			scene.crosshair.show()
-		GalvoScene.mousePressEvent(scene, ev)
+		for sh in scene.getGalvoShapes():
+			sh.setSelected(False)
+		scene.galvo.activateLasers()
+		scene.crosshair.setPos(ev.scenePos())	# auto positions the laser
 
-	elif ev.button() == QtCore.Qt.RightButton:
+	elif ev.button() == QtCore.Qt.LeftButton:	#left click draws rois/toggles rois
 		pos = ev.scenePos()
+
+		if int(ev.modifiers()) == QtCore.Qt.ControlModifier:
+			for sh in scene.getGalvoShapes():
+				if sh.mouseIsOver:
+					sh.setSelected(not sh.selected)
+					return
 		toggled = False
-		for sh in scene.shapes():
+		for sh in scene.getGalvoShapes():
 			if sh.mouseIsOver:
-				sh.toggle()
+				scene.crosshair.setVisible(False)
+				sh.setSelected(True)
 				toggled = True
-			elif int(ev.modifiers()) != QtCore.Qt.ControlModifier and sh.selected:
-				sh.toggle()
-				toggled = True
+			elif sh.selected:
+				sh.setSelected(False)
+
 		if not toggled:
+			for sh in scene.getGalvoShapes():
+				sh.setSelected(False)
 			cur_shape = GalvoShape(pos)
 			scene.addItem(cur_shape)
+	GalvoScene.mousePressEvent(scene, ev)
 
 def keyPressEvent(ev):
 	if ev.key() == 16777223:
-		for sh in scene.shapes()[::-1]:
+		for sh in scene.getGalvoShapes()[::-1]:
 			if sh.selected:
 				scene.removeItem(sh)
 
 def mouseMoveEvent(ev):
 	if cur_shape != None:
 		cur_shape.addPoint(ev.scenePos())
-	else:
-		for sh in scene.shapes():
-			sh.mouseOver(ev.scenePos())
 	GalvoScene.mouseMoveEvent(scene, ev)
 
 def mouseReleaseEvent(ev):
@@ -107,13 +117,12 @@ def startThread(duration = -1):
 	scene.crosshair.setVisible(False)
 	thread.setDuration(duration)
 	thread.drawing = True
-	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.shapes() if shape.selected])
+	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected])
 	thread.start()
 
 def stopThread():
 	global thread
 	thread.stop()
-	scene.crosshair.setVisible(True)
 	if ui.continuousButton.isChecked():
 		ui.continuousButton.setChecked(False)
 
@@ -125,8 +134,8 @@ def updateLasers():
 def configure():
 	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
 	lines = {}
-	for i in range(2):
-		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for Laser %d. Currently at Line %d" % (i + 1, old_lines[i]), ['Line %d' % i for i in range(8)], editable=False)
+	for i, name in enumerate(['405', '455 Guide']):
+		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for %s. Currently at Line %d" % (name, old_lines[i]), ['Line %d' % i for i in range(8)], editable=False)
 		if not ok:
 			lines[old_lines[i]] = False
 		else:
@@ -135,6 +144,7 @@ def configure():
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
+ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 ui.closeEvent = onClose
 ui.showEvent = onOpen
 scene = GalvoScene()
@@ -142,7 +152,6 @@ thread = ShapeThread(scene.galvo)
 scene.mousePressEvent = mousePressEvent
 scene.mouseMoveEvent = mouseMoveEvent
 scene.mouseReleaseEvent = mouseReleaseEvent
-scene.shapes = lambda : [i for i in scene.items() if isinstance(i, GalvoShape)]
 ui.keyPressEvent = keyPressEvent
 
 ui.graphicsView.setScene(scene)

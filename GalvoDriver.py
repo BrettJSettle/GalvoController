@@ -9,11 +9,12 @@ class GalvoScene(QtGui.QGraphicsScene):
 	def __init__(self, **kargs):
 		super(GalvoScene, self).__init__(**kargs)
 		self.crosshair = CrossHair()
-		self.crosshair.sigMoved.connect(self.updatePos)
+		self.crosshair.sigMoved.connect(self.crosshairMoved)
 		self.addItem(self.crosshair)
 		self.galvo = GalvoDriver()
+		self.crosshair.dragging = False
 
-	def updatePos(self, pos):
+	def crosshairMoved(self, pos):
 		pos = self.mapToGalvo(pos)
 		out = False
 		if not (0 <= pos.x() <= 1 and 0 <= pos.y() <= 1):
@@ -22,12 +23,28 @@ class GalvoScene(QtGui.QGraphicsScene):
 			self.crosshair.setPos(self.views()[0].mapToScene(self.views()[0].width() * pos.x(), self.views()[0].height() * pos.y()))
 		self.galvo.setPos(pos)
 
+	def getGalvoShapes(self):
+		return [i for i in self.items()[::-1] if isinstance(i, GalvoShape)]
+
 	def mousePressEvent(self, ev):
 		global settings
-		p = ev.scenePos()
-		if ev.button() == QtCore.Qt.LeftButton:
+		if ev.button() == QtCore.Qt.RightButton:
 			self.crosshair.setPos(ev.scenePos())
-		QtGui.QGraphicsScene.mousePressEvent(self, ev)
+			self.crosshair.dragging = True
+		#QtGui.QGraphicsScene.mousePressEvent(self, ev)
+
+	def mouseMoveEvent(self, ev):
+		if self.crosshair.dragging:
+			self.crosshair.setPos(ev.scenePos())
+		for sh in self.getGalvoShapes():
+			sh.mouseOver(ev.scenePos())
+		QtGui.QGraphicsScene.mouseMoveEvent(self, ev)
+
+	def mouseReleaseEvent(self, ev):
+		if self.crosshair.dragging:
+			self.crosshair.dragging = False
+		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
+
 
 	def clear(self):
 		for i in self.items()[::-1]:
@@ -91,6 +108,7 @@ class GalvoDriver():
 		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2 #dummy variable
 		self.read = int32()
+		self.active = False
 		self.lines = {0: False, 1: False}
 		self.establishChannels()
 		self.pos = QtCore.QPointF()
@@ -107,17 +125,11 @@ class GalvoDriver():
 		self.digital_output.CreateDOChan(b'Dev1/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
 
 	def activateLasers(self, lines=[]):
-		if len(lines) == 0:
-			lines = self.lines.keys()
-		for line in lines:
-			self.lines[line] = True
+		self.active = True
 		self.updateDigital()
 	
 	def deactivateLasers(self, lines=[]):
-		if len(lines) == 0:
-			lines = self.lines.keys()
-		for line in lines:
-			self.lines[line] = False
+		self.active = False
 		self.updateDigital()
 
 	def setLines(self, lines):
@@ -126,9 +138,10 @@ class GalvoDriver():
 
 	def updateDigital(self):
 		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
-		for i in self.lines:
-			if self.lines[i]:
-				digital_data[i] = 1
+		if self.active:
+			for i in self.lines:
+				if self.lines[i]:
+					digital_data[i] = 1
 		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
 
 	def setPos(self, *args):
