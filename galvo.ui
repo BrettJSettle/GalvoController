@@ -319,7 +319,7 @@ p, li { white-space: pre-wrap; }
     <addaction name="actionExport"/>
     <addaction name="actionAutosave"/>
     <addaction name="separator"/>
-    <addaction name="configureAction"/>
+    <addaction name="actionConfigure"/>
    </widget>
    <addaction name="menuGalvo"/>
    <addaction name="menuSettings"/>
@@ -361,9 +361,14 @@ p, li { white-space: pre-wrap; }
     <string>Disconnect</string>
    </property>
   </action>
-  <action name="configureAction">
+  <action name="actionConfigure">
    <property name="text">
     <string>Configure Ports</string>
+   </property>
+  </action>
+  <action name="actionRename">
+   <property name="text">
+    <string>Rename Lasers</string>
    </property>
   </action>
  </widget>

@@ -7,6 +7,8 @@ from GalvoDriver import *
 from GalvoGraphics import *
 from threading import Timer
 
+lasers = ('405 nm', '450 Guide')
+
 def calibrate():
 	global settings
 	scene.reset()
@@ -59,7 +61,6 @@ def onClose(ev):
 
 def mousePressEvent(ev):
 	global cur_shape, thread
-
 	if thread.isRunning():	#clicking interrupts shape drawing
 		stopThread()
 
@@ -93,7 +94,6 @@ def mousePressEvent(ev):
 				sh.setSelected(False)
 			cur_shape = GalvoShape(pos)
 			scene.addItem(cur_shape)
-	GalvoScene.mousePressEvent(scene, ev)
 
 def keyPressEvent(ev):
 	if ev.key() == 16777223:
@@ -116,6 +116,8 @@ def mouseReleaseEvent(ev):
 def startThread(duration = -1):
 	scene.crosshair.setVisible(False)
 	thread.setDuration(duration)
+	if duration > 0:
+		ui.continuousButton.setChecked(False)
 	thread.drawing = True
 	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected])
 	thread.start()
@@ -134,7 +136,7 @@ def updateLasers():
 def configure():
 	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
 	lines = {}
-	for i, name in enumerate(['405', '455 Guide']):
+	for i, name in enumerate(lasers):
 		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for %s. Currently at Line %d" % (name, old_lines[i]), ['Line %d' % i for i in range(8)], editable=False)
 		if not ok:
 			lines[old_lines[i]] = False
@@ -167,9 +169,11 @@ ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
+ui.laser1Button.setText(lasers[0])
 ui.laser2Button.toggled.connect(lambda f: updateLasers())
+ui.laser2Button.setText(lasers[1])
 
-ui.configureAction.triggered.connect(configure)
+ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)
 ui.actionReset.triggered.connect(scene.reset)
 ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
