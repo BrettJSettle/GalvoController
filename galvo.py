@@ -61,39 +61,34 @@ def onClose(ev):
 
 def mousePressEvent(ev):
 	global cur_shape, thread
+
 	if thread.isRunning():	#clicking interrupts shape drawing
 		stopThread()
+	
+	pos = ev.scenePos()
+	if ev.button() == QtCore.Qt.RightButton:	#right click draws rois
+		cur_shape = GalvoShape(pos)
+		scene.addItem(cur_shape)
 
-	if ev.button() == QtCore.Qt.RightButton:	#right click drags the laser dot
-		if not scene.crosshair.isVisible():
-			scene.crosshair.show()
+	elif ev.button() == QtCore.Qt.LeftButton:	#left click selects rois, drags laser
+		move = True
 		for sh in scene.getGalvoShapes():
-			sh.setSelected(False)
-		scene.galvo.activateLasers()
-		scene.crosshair.setPos(ev.scenePos())	# auto positions the laser
-
-	elif ev.button() == QtCore.Qt.LeftButton:	#left click draws rois/toggles rois
-		pos = ev.scenePos()
-
-		if int(ev.modifiers()) == QtCore.Qt.ControlModifier:
-			for sh in scene.getGalvoShapes():
-				if sh.mouseIsOver:
-					sh.setSelected(not sh.selected)
-					return
-		toggled = False
-		for sh in scene.getGalvoShapes():
+			move = move and sh.selected
+			if sh.mouseIsOver and int(ev.modifiers()) == QtCore.Qt.ControlModifier:
+				sh.setSelected(not sh.selected)
 			if sh.mouseIsOver:
 				scene.crosshair.setVisible(False)
 				sh.setSelected(True)
-				toggled = True
-			elif sh.selected:
+			elif sh.selected and (not sh.mouseIsOver and not int(ev.modifiers()) == QtCore.Qt.ControlModifier):
 				sh.setSelected(False)
-
-		if not toggled:
+		if move:
 			for sh in scene.getGalvoShapes():
 				sh.setSelected(False)
-			cur_shape = GalvoShape(pos)
-			scene.addItem(cur_shape)
+			if not scene.crosshair.isVisible():
+				scene.crosshair.show()
+			scene.galvo.activateLasers()
+			scene.crosshair.setPos(ev.scenePos())	# auto positions the laser
+			GalvoScene.mousePressEvent(scene, ev)
 
 def keyPressEvent(ev):
 	if ev.key() == 16777223:
@@ -116,8 +111,6 @@ def mouseReleaseEvent(ev):
 def startThread(duration = -1):
 	scene.crosshair.setVisible(False)
 	thread.setDuration(duration)
-	if duration > 0:
-		ui.continuousButton.setChecked(False)
 	thread.drawing = True
 	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected])
 	thread.start()
@@ -169,9 +162,7 @@ ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
-ui.laser1Button.setText(lasers[0])
 ui.laser2Button.toggled.connect(lambda f: updateLasers())
-ui.laser2Button.setText(lasers[1])
 
 ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)

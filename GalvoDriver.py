@@ -12,7 +12,6 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.crosshair.sigMoved.connect(self.crosshairMoved)
 		self.addItem(self.crosshair)
 		self.galvo = GalvoDriver()
-		self.crosshair.dragging = False
 
 	def crosshairMoved(self, pos):
 		pos = self.mapToGalvo(pos)
@@ -25,26 +24,6 @@ class GalvoScene(QtGui.QGraphicsScene):
 
 	def getGalvoShapes(self):
 		return [i for i in self.items()[::-1] if isinstance(i, GalvoShape)]
-
-	def mousePressEvent(self, ev):
-		global settings
-		if ev.button() == QtCore.Qt.RightButton:
-			self.crosshair.setPos(ev.scenePos())
-			self.crosshair.dragging = True
-		#QtGui.QGraphicsScene.mousePressEvent(self, ev)
-
-	def mouseMoveEvent(self, ev):
-		if self.crosshair.dragging:
-			self.crosshair.setPos(ev.scenePos())
-		for sh in self.getGalvoShapes():
-			sh.mouseOver(ev.scenePos())
-		QtGui.QGraphicsScene.mouseMoveEvent(self, ev)
-
-	def mouseReleaseEvent(self, ev):
-		if self.crosshair.dragging:
-			self.crosshair.dragging = False
-		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
-
 
 	def clear(self):
 		for i in self.items()[::-1]:
