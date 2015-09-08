@@ -6,8 +6,24 @@ import time, sys
 from GalvoDriver import *
 from GalvoGraphics import *
 from threading import Timer
+import fileinput
+import serial.tools.list_ports
 
 lasers = ('405 nm', '450 Guide')
+
+arduino_port = 'COM4'
+
+if arduino_port == '':
+	ports = list(serial.tools.list_ports.comports())
+	for p in ports:
+		if 'Arduino' in p[1]:
+			arduino_port = p[0]
+			break
+	for line in fileinput.input('galvo.py', inplace=1):
+		if line.startswith('arduino_port = \''):
+			print("arduino_port = '%s'" % arduino_port)
+		else:
+			print(line, end='')
 
 def calibrate():
 	global settings
@@ -59,58 +75,12 @@ def onClose(ev):
 		export_settings('settings.p')
 	sys.exit(0)
 
-def mousePressEvent(ev):
-	global cur_shape, thread
-
-	if thread.isRunning():	#clicking interrupts shape drawing
-		stopThread()
-	
-	pos = ev.scenePos()
-	if ev.button() == QtCore.Qt.RightButton:	#right click draws rois
-		cur_shape = GalvoShape(pos)
-		scene.addItem(cur_shape)
-
-	elif ev.button() == QtCore.Qt.LeftButton:	#left click selects rois, drags laser
-		move = True
-		for sh in scene.getGalvoShapes():
-			move = move and sh.selected
-			if sh.mouseIsOver and int(ev.modifiers()) == QtCore.Qt.ControlModifier:
-				sh.setSelected(not sh.selected)
-			if sh.mouseIsOver:
-				scene.crosshair.setVisible(False)
-				sh.setSelected(True)
-			elif sh.selected and (not sh.mouseIsOver and not int(ev.modifiers()) == QtCore.Qt.ControlModifier):
-				sh.setSelected(False)
-		if move:
-			for sh in scene.getGalvoShapes():
-				sh.setSelected(False)
-			if not scene.crosshair.isVisible():
-				scene.crosshair.show()
-			scene.galvo.activateLasers()
-			scene.crosshair.setPos(ev.scenePos())	# auto positions the laser
-			GalvoScene.mousePressEvent(scene, ev)
-
-def keyPressEvent(ev):
-	if ev.key() == 16777223:
-		for sh in scene.getGalvoShapes()[::-1]:
-			if sh.selected:
-				scene.removeItem(sh)
-
-def mouseMoveEvent(ev):
-	if cur_shape != None:
-		cur_shape.addPoint(ev.scenePos())
-	GalvoScene.mouseMoveEvent(scene, ev)
-
-def mouseReleaseEvent(ev):
-	global cur_shape
-	if cur_shape != None:
-		cur_shape.close()
-		cur_shape = None
-	GalvoScene.mouseReleaseEvent(scene, ev)
-
 def startThread(duration = -1):
+	global thread
 	scene.crosshair.setVisible(False)
 	thread.setDuration(duration)
+	if duration > 0:
+		ui.continuousButton.setChecked(False)
 	thread.drawing = True
 	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected])
 	thread.start()
@@ -137,17 +107,24 @@ def configure():
 			lines[int(result[-1])] = False
 	scene.galvo.setLines(lines)
 
+def selectionChanged():
+	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
+	thread.setPoints(ps)
+	if len(ps) == 0 and thread.isRunning():
+		stopThread()
+
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
 ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 ui.closeEvent = onClose
 ui.showEvent = onOpen
-scene = GalvoScene()
+if 'daq' in sys.argv:
+	scene = GalvoScene()
+else:
+	scene = GalvoScene(port=arduino_port)
 thread = ShapeThread(scene.galvo)
-scene.mousePressEvent = mousePressEvent
-scene.mouseMoveEvent = mouseMoveEvent
-scene.mouseReleaseEvent = mouseReleaseEvent
-ui.keyPressEvent = keyPressEvent
+
+scene.sigSelectionChanged.connect(selectionChanged)
 
 ui.graphicsView.setScene(scene)
 scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
@@ -162,7 +139,9 @@ ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
+ui.laser1Button.setText(lasers[0])
 ui.laser2Button.toggled.connect(lambda f: updateLasers())
+ui.laser2Button.setText(lasers[1])
 
 ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)

@@ -6,7 +6,6 @@ class CrossHair(QtGui.QGraphicsObject):
 	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self, parent=None, size=7, color = QtCore.Qt.red, pos=QtCore.QPointF(0, 0)):
 		QtGui.QGraphicsObject.__init__(self, parent)
-		self.setFlag(QtGui.QGraphicsItem.ItemIsMovable)
 		self.pen = QtGui.QPen(color)
 		self.pen.setWidth(2)
 		self.setZValue(10)
@@ -14,11 +13,6 @@ class CrossHair(QtGui.QGraphicsObject):
 		self.size = size
 		self.xChanged.connect(lambda : self.sigMoved.emit(self.pos()))
 		self.yChanged.connect(lambda: self.sigMoved.emit(self.pos()))
-
-	def contains(self, p):
-		rect = self.boundingRect()
-		rect.moveTo(self.pos())
-		return rect.contains(p)
 
 	def paint(self, painter, option, widget):
 		'''paint the crosshair'''
@@ -35,6 +29,7 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
 		super(GalvoShape, self).__init__(self.path)
+
 		self.path_pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
 		self.path_pen.setWidth(2)
 		self.setPen(self.path_pen)
