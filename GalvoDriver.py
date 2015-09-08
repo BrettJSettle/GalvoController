@@ -249,10 +249,11 @@ class ArduinoGalvoDriver(GalvoBase):
 
 	def updateDigital(self):
 		if self.active:
+			s = 'D'
 			for i in self.lines:
-				s = 'D%d' % i
-				self.ser.write()
-				self.ser.write(str(self.lines[i]).encode('utf-8'))
+				s += ' %d %d' % (i, self.lines[i])
+			s += '\n'
+			self.ser.write(s.encode('utf-8'))
 
 	def write_points(self, points):
 		return
