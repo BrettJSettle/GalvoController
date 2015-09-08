@@ -248,11 +248,10 @@ class ArduinoGalvoDriver(GalvoBase):
 		self.update()
 
 	def updateDigital(self):
-		#print('lasers update')
-		return
 		if self.active:
 			for i in self.lines:
-				self.ser.write(str(i).encode('utf-8'))
+				s = 'D%d' % i
+				self.ser.write()
 				self.ser.write(str(self.lines[i]).encode('utf-8'))
 
 	def write_points(self, points):
