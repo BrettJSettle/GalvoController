@@ -10,12 +10,11 @@ import fileinput
 import serial.tools.list_ports
 
 lasers = ('405 nm', '450 Guide')
-
+available_ports = list(serial.tools.list_ports.comports())
 arduino_port = 'COM4'
 
-if arduino_port == '':
-	ports = list(serial.tools.list_ports.comports())
-	for p in ports:
+if 'daq' not in sys.argv and (arduino_port == '' or not any([arduino_port == p[0] for p in available_ports])):
+	for p in available_ports:
 		if 'Arduino' in p[1]:
 			arduino_port = p[0]
 			break
@@ -33,33 +32,40 @@ def calibrate():
 	aim.setBrush(QtGui.QColor(255, 0, 0))
 	scene.addItem(aim)
 	ui.infoLabel.setText('Resize the window, drag the laser to the top left corner, then press any key')
-	ui.keyPressEvent = lambda ev: setattr(scene, 'tempRect', QtCore.QRectF(scene.galvo.pos, QtCore.QSizeF()))
+	scene.keyPressEvent = lambda ev: setattr(scene, 'tempRect', QtCore.QRectF(scene.galvo.pos, QtCore.QSizeF()))
 	while not hasattr(scene, 'tempRect'):
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
 
 	aimRect.moveTo(ui.graphicsView.mapToScene(ui.graphicsView.width() - 20, ui.graphicsView.height() - 20))
 	aim.setRect(aimRect)
-	ui.keyPressEvent = lambda ev: scene.tempRect.setSize(QtCore.QSizeF(scene.galvo.pos.x() - scene.tempRect.x(), scene.galvo.pos.y() - scene.tempRect.y()))
+	scene.keyPressEvent = lambda ev: scene.tempRect.setSize(QtCore.QSizeF(scene.galvo.pos.x() - scene.tempRect.x(), scene.galvo.pos.y() - scene.tempRect.y()))
 	ui.infoLabel.setText('Now drag the laser to the bottom right and press any key')
 	while scene.tempRect.isEmpty():
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
 	scene.removeItem(aim)
-	ui.keyPressEvent = keyPressEvent
+	scene.keyPressEvent = GalvoScene.keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
-	ui.infoLabel.setText('Calibrated, right click drag to position laser. Left click drag to translate crosshair')
+	ui.infoLabel.setText('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
 
 def import_settings(fname):
 	with open(fname, 'rb') as f:
 		d = pickle.load(f)
+	ui.setGeometry(*d['window'])
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
 	scene.galvo.setLines({k: False for k in d['lasers']})
-
+	scene.center()
+	
 def export_settings(fname):
+	geom = ui.geometry()
+	x = geom.x()
+	y = geom.y()
+	w = geom.width()
+	h = geom.height()
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
 			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
-			'lasers': list(scene.galvo.lines.keys())}
+			'lasers': list(scene.galvo.lines.keys()), 'window': list([x, y, w, h])}
 	with open(fname, 'wb') as f:
 		pickle.dump(values, f)
 
@@ -70,24 +76,23 @@ def onOpen(ev):
 		print(e)
 
 def onClose(ev):
-	scene.galvo.deactivateLasers()
+	scene.galvo.stop()
+	scene.galvo.penUp()
 	if ui.actionAutosave.isChecked():
 		export_settings('settings.p')
 	sys.exit(0)
 
-def startThread(duration = -1):
-	global thread
+def startThread(duration = -1):	# called from manual, pulse, and continuous
 	scene.crosshair.setVisible(False)
-	thread.setDuration(duration)
 	if duration > 0:
 		ui.continuousButton.setChecked(False)
-	thread.drawing = True
-	thread.setPoints([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected])
-	thread.start()
+	if any([shape.selected for shape in scene.getGalvoShapes()]):
+		scene.galvo.draw_shapes([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected], duration)
+	else:
+		stopThread()
 
-def stopThread():
-	global thread
-	thread.stop()
+def stopThread():	# called on manual release, continuous unncheck
+	scene.galvo.stop()
 	if ui.continuousButton.isChecked():
 		ui.continuousButton.setChecked(False)
 
@@ -109,9 +114,14 @@ def configure():
 
 def selectionChanged():
 	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
-	thread.setPoints(ps)
-	if len(ps) == 0 and thread.isRunning():
+	scene.galvo.setShapes(ps)
+	if len(ps) == 0:
 		stopThread()
+
+def crosshairMoved(pos):
+	if not scene.galvo.active:
+		scene.galvo.penDown()
+	ui.continuousButton.setChecked(False)
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
@@ -122,9 +132,9 @@ if 'daq' in sys.argv:
 	scene = GalvoScene()
 else:
 	scene = GalvoScene(port=arduino_port)
-thread = ShapeThread(scene.galvo)
 
 scene.sigSelectionChanged.connect(selectionChanged)
+scene.crosshair.sigMoved.connect(crosshairMoved)
 
 ui.graphicsView.setScene(scene)
 scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
@@ -133,11 +143,14 @@ ui.calibrateButton.pressed.connect(calibrate)
 ui.clearButton.pressed.connect(scene.clear)
 ui.resetButton.pressed.connect(scene.reset)
 ui.closeButton.pressed.connect(ui.close)
+
 ui.manualButton.pressed.connect(startThread)
 ui.manualButton.released.connect(stopThread)
 ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
+
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
+ui.opacitySlider.setValue(50)
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
 ui.laser1Button.setText(lasers[0])
 ui.laser2Button.toggled.connect(lambda f: updateLasers())

@@ -4,6 +4,7 @@ import numpy as np
 class CrossHair(QtGui.QGraphicsObject):
 	'''draggable crosshair object that acts as an aimer in a QGraphics Scene'''
 	sigMoved = QtCore.pyqtSignal(object)
+	sigVisibilityChanged = QtCore.pyqtSignal(bool)
 	def __init__(self, parent=None, size=7, color = QtCore.Qt.red, pos=QtCore.QPointF(0, 0)):
 		QtGui.QGraphicsObject.__init__(self, parent)
 		self.pen = QtGui.QPen(color)
@@ -13,6 +14,10 @@ class CrossHair(QtGui.QGraphicsObject):
 		self.size = size
 		self.xChanged.connect(lambda : self.sigMoved.emit(self.pos()))
 		self.yChanged.connect(lambda: self.sigMoved.emit(self.pos()))
+		
+	def setVisible(self, v):
+		super(CrossHair, self).setVisible(v)
+		self.sigVisibilityChanged.emit(v)
 
 	def paint(self, painter, option, widget):
 		'''paint the crosshair'''
@@ -40,9 +45,6 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
-
-	def mousePressEvent(self, ev):
-		self.scene().mousePressEvent(ev)
 
 	def mouseOver(self, pos):
 		self.mouseIsOver = self.path.contains(pos)
