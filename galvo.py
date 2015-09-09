@@ -105,7 +105,7 @@ def configure():
 	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
 	lines = {}
 	for i, name in enumerate(lasers):
-		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for %s. Currently at Line %d" % (name, old_lines[i]), ['Line %d' % i for i in range(8)], editable=False)
+		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for %s. Currently at Line %d" % (name, old_lines[i]), ['Line %d' % i for i in range(16)], editable=False)
 		if not ok:
 			lines[old_lines[i]] = False
 		else:
@@ -123,6 +123,20 @@ def crosshairMoved(pos):
 		scene.galvo.penDown()
 	ui.continuousButton.setChecked(False)
 
+def lineRead(line):
+	print(line)
+	if ', ' in line:
+		x, y = [float(i) for i in (line.split(', '))]
+		p1 = scene.mapFromGalvo(QtCore.QPointF(x+.02, y))
+		p2 = scene.mapFromGalvo(QtCore.QPointF(x-.02, y))
+		cross1.setPos(p1)
+		cross2.setPos(p2)
+	else:
+		if line[0] == '7':
+			cross1.setVisible(line[-1] == '1')
+		elif line[0] == '11':
+			cross2.setVisible(line[-1] == '1')
+
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
 ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
@@ -132,6 +146,15 @@ if 'daq' in sys.argv:
 	scene = GalvoScene()
 else:
 	scene = GalvoScene(port=arduino_port)
+	##testing
+	scene.galvo.lineRead.connect(lineRead)
+	cross1 = CrossHair()
+	cross2 = CrossHair()
+	scene.addItem(cross1)
+	#cross1.setVisible(False)
+	scene.addItem(cross2)
+	#cross2.setVisible(False)
+
 
 scene.sigSelectionChanged.connect(selectionChanged)
 scene.crosshair.sigMoved.connect(crosshairMoved)

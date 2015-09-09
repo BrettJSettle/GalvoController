@@ -110,9 +110,9 @@ class GalvoScene(QtGui.QGraphicsScene):
 
 	def mapFromGalvo(self, pt):
 		'''maps an analog output value to a scene coordinate'''
-		p = pt - self.galvo.boundRect.topLeft()
-		p.setX(p.x() / scene.galvo.boundRect.width() * self.views()[0].width())
-		p.setY(p.y() / scene.galvo.boundRect.height() * self.views()[0].height())
+		p = pt# + self.galvo.boundRect.topLeft()
+		p.setX(p.x() / self.galvo.boundRect.width() * self.views()[0].width())
+		p.setY(p.y() / self.galvo.boundRect.height() * self.views()[0].height())
 		return p
 
 	def mapToGalvo(self, pt):
@@ -235,6 +235,7 @@ class GalvoDriver(GalvoBase):
 class ArduinoGalvoDriver(GalvoBase):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
+	lineRead = QtCore.pyqtSignal(str)
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
 	def __init__(self, port):
 		super(ArduinoGalvoDriver, self).__init__()
@@ -250,8 +251,8 @@ class ArduinoGalvoDriver(GalvoBase):
 		for i in self.lines:
 			s += '%s%d' % (hex(i)[-1], lines[i])
 		self.ser.write(s.encode('utf-8'))
-		print(self.ser.readline())
-		print(self.ser.readline())
+		self.readline()
+		self.readline()
 
 	def write_points(self, points):
 		pts = []
@@ -260,7 +261,12 @@ class ArduinoGalvoDriver(GalvoBase):
 		for p in pts:
 			s = 'A%.4f %.4f' % (p[0], p[1])
 			self.ser.write(s.encode('utf-8'))
-			print(self.ser.readline())
+			self.readline()
+
+	def readline(self):
+		s = self.ser.readline().decode('utf-8')
+		self.lineRead.emit(s)
+		return s
 
 	def draw_shapes(self, shapes, duration=-1):
 		self.shapes = shapes
@@ -285,5 +291,5 @@ class ArduinoGalvoDriver(GalvoBase):
 	def update(self):
 		s = 'A%.3f %.3f;' % (self.pos.x(), self.pos.y())
 		self.ser.write(s.encode('utf-8'))
-		print(self.ser.readline())
+		self.readline()
 		
