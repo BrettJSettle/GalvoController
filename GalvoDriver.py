@@ -8,17 +8,36 @@ if 'daq' in sys.argv:
 	from PyDAQmx.DAQmxCallBack import *
 import time
 
+class Laser(QtCore.QObject):
+	sigRenamed = QtCore.pyqtSignal(str)
+	sigPinChanged = QtCore.pyqtSignal(int)
+	def __init__(self, name, pin):
+		super(Laser, self).__init__()
+		self.name = name
+		self.pin = pin
+		self.active = False
+	def activate(self):
+		self.active = True
+	def deactivate(self):
+		self.active = False
+	def rename(self, s):
+		self.name = s
+		self.sigRenamed.emit(s)
+	def changePin(self, p):
+		self.pin = p
+		self.sigPinChanged.emit(p)
+		
 class GalvoScene(QtGui.QGraphicsScene):
 	sigSelectionChanged = QtCore.pyqtSignal()
-	def __init__(self, port='', **kargs):
+	def __init__(self, lasers, port='', **kargs):
 		super(GalvoScene, self).__init__(**kargs)
 		self.crosshair = CrossHair()
 		self.crosshair.sigMoved.connect(self.crosshairMoved)
 		self.addItem(self.crosshair)
 		if port != '':
-			self.galvo = ArduinoGalvoDriver(port=port)
+			self.galvo = ArduinoGalvoDriver(lasers, port=port)
 		else:
-			self.galvo = GalvoDriver()
+			self.galvo = GalvoDriver(lasers)
 		self.crosshair.dragging = False
 		self.crosshair.sigVisibilityChanged.connect(lambda f: self.galvo.penDown() if f else self.galvo.penUp())
 
@@ -102,7 +121,6 @@ class GalvoScene(QtGui.QGraphicsScene):
 		for i in self.items()[::-1]:
 			if isinstance(i, GalvoShape):
 				self.removeItem(i)
-		#self.addItem(self.crosshair)
 
 	def reset(self):
 		self.galvo.setBounds(QtCore.QRect(-10, -10, 20, 20))
@@ -110,9 +128,9 @@ class GalvoScene(QtGui.QGraphicsScene):
 
 	def mapFromGalvo(self, pt):
 		'''maps an analog output value to a scene coordinate'''
-		p = pt# + self.galvo.boundRect.topLeft()
-		p.setX(p.x() / self.galvo.boundRect.width() * self.views()[0].width())
-		p.setY(p.y() / self.galvo.boundRect.height() * self.views()[0].height())
+		p = pt - self.galvo.boundRect.topLeft()
+		p.setX(p.x() / scene.galvo.boundRect.width() * self.views()[0].width())
+		p.setY(p.y() / scene.galvo.boundRect.height() * self.views()[0].height())
 		return p
 
 	def mapToGalvo(self, pt):
@@ -126,10 +144,10 @@ class GalvoBase(QtCore.QThread):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
-	def __init__(self):
+	def __init__(self, lasers):
 		super(GalvoBase, self).__init__()
 		self.active = True
-		self.lines = {0: False, 1: False}
+		self.lasers = lasers
 		self.pos = QtCore.QPointF()
 		self.shapes = []
 		self.duration = -1
@@ -154,8 +172,8 @@ class GalvoBase(QtCore.QThread):
 		self.active = False
 		self.updateDigital()
 
-	def setLines(self, lines):
-		self.lines = lines
+	def setLasers(self, lasers):
+		self.lasers = lasers
 		self.updateDigital()
 
 	def setPos(self, *args, penUp=False):
@@ -177,28 +195,29 @@ class GalvoDriver(GalvoBase):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
-	def __init__(self):
-		super(GalvoDriver, self).__init__()
+	def __init__(self, lasers):
+		super(GalvoDriver, self).__init__(lasers)
 		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
-		self.bufferSize=2 #dummy variable
+		self.bufferSize=2
 		self.read = int32()
 		self.establishChannels()
 		self.update()
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
-		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		#self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		#self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
-		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+		#self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
 
 	def updateDigital(self):
 		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
 		if self.active:
-			for i in self.lines:
-				if self.lines[i]:
-					digital_data[i] = 1
-		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
+			for i in self.lasers:
+				if i.active:
+					digital_data[i.pin] = 1
+		#self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
+		print("Lasers: %s" % digital_data)
 
 	def run(self):
 		start = time.clock()
@@ -225,71 +244,11 @@ class GalvoDriver(GalvoBase):
 			pts.append([self.boundRect.x() + (p.x() * self.boundRect.width()), self.boundRect.y() + (p.y() * self.boundRect.height())])
 		data = np.array([p[1] for p in pts] + [-p[0] for p in pts], dtype=np.float64) # sent as (y, -x)
 		samps = len(data)//2
-		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		#self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		print("Galvo Shape Draw")
 
 	def update(self):
 		self.analog_output.StopTask()
 		data = np.array([self.pos.y(), self.pos.y(), -self.pos.x(), -self.pos.x()], dtype=np.float64)
-		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
-
-class ArduinoGalvoDriver(GalvoBase):
-	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
-	handles maximum and minimum values accordingly'''
-	lineRead = QtCore.pyqtSignal(str)
-	boundRect = QtCore.QRectF(-10, -10, 20, 20)
-	def __init__(self, port):
-		super(ArduinoGalvoDriver, self).__init__()
-		self.ser = serial.Serial(port, 9600, timeout=2)
-		self.update()
-
-	def updateDigital(self):
-		lines = self.lines
-		if not self.active:
-			for k in lines:
-				lines[k] = False
-		s = 'D'
-		for i in self.lines:
-			s += '%s%d' % (hex(i)[-1], lines[i])
-		self.ser.write(s.encode('utf-8'))
-		self.readline()
-		self.readline()
-
-	def write_points(self, points):
-		pts = []
-		for p in points:
-			pts.append([self.boundRect.x() + (p.x() * self.boundRect.width()), self.boundRect.y() + (p.y() * self.boundRect.height())])
-		for p in pts:
-			s = 'A%.4f %.4f' % (p[0], p[1])
-			self.ser.write(s.encode('utf-8'))
-			self.readline()
-
-	def readline(self):
-		s = self.ser.readline().decode('utf-8')
-		self.lineRead.emit(s)
-		return s
-
-	def draw_shapes(self, shapes, duration=-1):
-		self.shapes = shapes
-		if len(shapes) > 1:
-			shapes = [shapes[0][:-1] + shapes[0][::-1]]
-		self.duration = duration
-		self.start()
-
-	def run(self):
-		start = time.clock()
-		while (self.duration == -1 or time.clock() - start < self.duration):
-			if not self.active:
-				self.penDown()
-			if len(self.shapes) > 1:
-				for shape in self.shapes:
-					self.setPos(shape[0], penUp=True)
-					self.write_points(shape)
-			elif len(self.shapes) == 1:
-				self.write_points(self.shapes[0])
-		self.penUp()
-
-	def update(self):
-		s = 'A%.3f %.3f;' % (self.pos.x(), self.pos.y())
-		self.ser.write(s.encode('utf-8'))
-		self.readline()
-		
+		#self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		print("Galvo: %s" % self.pos)

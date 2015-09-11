@@ -6,23 +6,9 @@ import time, sys
 from GalvoDriver import *
 from GalvoGraphics import *
 from threading import Timer
-import fileinput
-import serial.tools.list_ports
 
-lasers = ('405 nm', '450 Guide')
-available_ports = list(serial.tools.list_ports.comports())
-arduino_port = 'COM4'
+lasers = (Laser(name='450 Guide', pin=0), Laser('405 nm', pin=2))
 
-if 'daq' not in sys.argv and (arduino_port == '' or not any([arduino_port == p[0] for p in available_ports])):
-	for p in available_ports:
-		if 'Arduino' in p[1]:
-			arduino_port = p[0]
-			break
-	for line in fileinput.input('galvo.py', inplace=1):
-		if line.startswith('arduino_port = \''):
-			print("arduino_port = '%s'" % arduino_port)
-		else:
-			print(line, end='')
 
 def calibrate():
 	global settings
@@ -54,7 +40,9 @@ def import_settings(fname):
 		d = pickle.load(f)
 	ui.setGeometry(*d['window'])
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
-	scene.galvo.setLines({k: False for k in d['lasers']})
+	global lasers
+	lasers = [Laser(*d['laser1']), Laser(*d['laser2'])]
+	scene.galvo.setLasers(lasers)
 	scene.center()
 	
 def export_settings(fname):
@@ -65,7 +53,7 @@ def export_settings(fname):
 	h = geom.height()
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
 			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
-			'lasers': list(scene.galvo.lines.keys()), 'window': list([x, y, w, h])}
+			'laser1': (lasers[0].name, lasers[0].pin), 'laser2': (lasers[1].name, lasers[1].pin), 'window': list([x, y, w, h])}
 	with open(fname, 'wb') as f:
 		pickle.dump(values, f)
 
@@ -97,21 +85,36 @@ def stopThread():	# called on manual release, continuous unncheck
 		ui.continuousButton.setChecked(False)
 
 def updateLasers():
-	mi, ma = sorted(scene.galvo.lines)
-	li = {mi: ui.laser1Button.isChecked(), ma: ui.laser2Button.isChecked()}
-	scene.galvo.setLines(li)
+	global lasers
+	if ui.laser1Button.isChecked():
+		lasers[0].activate()
+	else:
+		lasers[0].deactivate()
+	if ui.laser2Button.isChecked():
+		lasers[1].activate()
+	else:
+		lasers[1].deactivate()
+	scene.galvo.setLasers(lasers)
 
 def configure():
-	old_lines = sorted(scene.galvo.lines.keys())	# get lines for lasers
-	lines = {}
-	for i, name in enumerate(lasers):
-		result, ok = QtGui.QInputDialog.getItem(ui, "Port Select", "Select the port for %s. Currently at Line %d" % (name, old_lines[i]), ['Line %d' % i for i in range(16)], editable=False)
-		if not ok:
-			lines[old_lines[i]] = False
-		else:
-			lines[int(result[-1])] = False
-	scene.galvo.setLines(lines)
+	old_lines = [l.name for l in lasers]	# get lines for lasers
+	for i, laser in enumerate(lasers):
+		result, ok = QtGui.QInputDialog.getItem(ui, "Pin Select", "Select the pin for %s. Currently at pin %d" % (laser.pin, old_lines[i]), ['Pin %d' % i for i in range(8)], editable=False)
+		if ok:
+			laser.changePin(int(result.split(' ')[0]))
+	scene.galvo.setLasers(lasers)
 
+def rename_lasers():
+	global lasers
+	result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser 1?", text=lasers[0].name)
+	if ok:
+		lasers[0].rename(result)
+		ui.laser1Button.setText(result)
+	result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser 2?", text=lasers[1].name)
+	if ok:
+		lasers[1].rename(result)
+		ui.laser2Button.setText(result)
+	
 def selectionChanged():
 	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
 	scene.galvo.setShapes(ps)
@@ -123,37 +126,17 @@ def crosshairMoved(pos):
 		scene.galvo.penDown()
 	ui.continuousButton.setChecked(False)
 
-def lineRead(line):
-	print(line)
-	if ', ' in line:
-		x, y = [float(i) for i in (line.split(', '))]
-		p1 = scene.mapFromGalvo(QtCore.QPointF(x+.02, y))
-		p2 = scene.mapFromGalvo(QtCore.QPointF(x-.02, y))
-		cross1.setPos(p1)
-		cross2.setPos(p2)
-	else:
-		if line[0] == '7':
-			cross1.setVisible(line[-1] == '1')
-		elif line[0] == '11':
-			cross2.setVisible(line[-1] == '1')
+def changeRasterShift():
+	result, ok = QtGui.QInputDialog.getInt(ui, "Raster Shift", "Enter the shift in pixels to translate the laser when rastering polygons:", GalvoShape.RASTER_GAP, min=0)
+	if ok:
+		GalvoShape.RASTER_GAP = result
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
 ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 ui.closeEvent = onClose
 ui.showEvent = onOpen
-if 'daq' in sys.argv:
-	scene = GalvoScene()
-else:
-	scene = GalvoScene(port=arduino_port)
-	##testing
-	scene.galvo.lineRead.connect(lineRead)
-	cross1 = CrossHair()
-	cross2 = CrossHair()
-	scene.addItem(cross1)
-	#cross1.setVisible(False)
-	scene.addItem(cross2)
-	#cross2.setVisible(False)
+scene = GalvoScene(lasers)
 
 
 scene.sigSelectionChanged.connect(selectionChanged)
@@ -173,15 +156,17 @@ ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
-ui.opacitySlider.setValue(50)
+ui.opacitySlider.setValue(85)
 ui.laser1Button.toggled.connect(lambda f: updateLasers())
-ui.laser1Button.setText(lasers[0])
+ui.laser1Button.setText(lasers[0].name)
 ui.laser2Button.toggled.connect(lambda f: updateLasers())
-ui.laser2Button.setText(lasers[1])
+ui.laser2Button.setText(lasers[1].name)
 
 ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)
 ui.actionReset.triggered.connect(scene.reset)
+ui.actionRename.triggered.connect(rename_lasers)
+ui.actionEditRaster.triggered.connect(changeRasterShift)
 ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
 ui.actionImport.triggered.connect(lambda : import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)')))
 ui.actionExport.triggered.connect(lambda : export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)')))

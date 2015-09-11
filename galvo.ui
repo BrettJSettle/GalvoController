@@ -253,7 +253,7 @@ p, li { white-space: pre-wrap; }
 }</string>
          </property>
          <property name="text">
-          <string>450 Guide</string>
+          <string>Laser 2</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -282,7 +282,7 @@ p, li { white-space: pre-wrap; }
 }</string>
          </property>
          <property name="text">
-          <string>405 nm</string>
+          <string>Laser 1</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -320,6 +320,8 @@ p, li { white-space: pre-wrap; }
     <addaction name="actionAutosave"/>
     <addaction name="separator"/>
     <addaction name="actionConfigure"/>
+	<addaction name="actionRename"/>
+	<addaction name="actionEditRaster"/>
    </widget>
    <addaction name="menuGalvo"/>
    <addaction name="menuSettings"/>
@@ -369,6 +371,11 @@ p, li { white-space: pre-wrap; }
   <action name="actionRename">
    <property name="text">
     <string>Rename Lasers</string>
+   </property>
+  </action>
+  <action name="actionEditRaster">
+   <property name="text">
+    <string>Set Raster Pixel Shift</string>
    </property>
   </action>
  </widget>

@@ -31,6 +31,7 @@ class CrossHair(QtGui.QGraphicsObject):
 		return QtCore.QRectF(-self.size - 1, -self.size - 1, 2 * self.size + 1, 2 * self.size + 1)
 
 class GalvoShape(QtGui.QGraphicsPathItem):
+	RASTER_GAP = 3
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
 		super(GalvoShape, self).__init__(self.path)
@@ -45,6 +46,9 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		ps = self.rasterPoints()
+		if len(ps) > 0:
+			painter.drawPoints(*ps)
 
 	def mouseOver(self, pos):
 		self.mouseIsOver = self.path.contains(pos)
@@ -74,15 +78,10 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 		r.setHeight(1)
 		rect = QtGui.QPainterPath()
 		rect.addRect(r)	#create painterPath of the top of the boundRect
-		left = True
 		while rect.boundingRect().y() < self.path.boundingRect().bottom():	# while the y-val is above the boundRect
 			r = self.path.intersected(rect).boundingRect()
-			if left:
-				raster.extend([r.topLeft(), r.topRight()])
-			else:
-				raster.extend([r.topRight(), r.topLeft()])
-			left = not left
-			rect.translate(0, 3) #translate the raster down slightly
+			raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.left(), r.right(), GalvoShape.RASTER_GAP)])
+			rect.translate(0, GalvoShape.RASTER_GAP) #translate the raster down slightly
 		return raster
 
 	def rasterPath(self):
