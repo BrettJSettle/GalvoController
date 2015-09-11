@@ -234,7 +234,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>390</y>
+           <y>400</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -263,7 +263,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>350</y>
+           <y>360</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -286,6 +286,19 @@ p, li { white-space: pre-wrap; }
          </property>
          <property name="checkable">
           <bool>true</bool>
+         </property>
+        </widget>
+        <widget class="QLabel" name="label">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>340</y>
+           <width>81</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Control Lasers:</string>
          </property>
         </widget>
        </widget>
@@ -320,8 +333,8 @@ p, li { white-space: pre-wrap; }
     <addaction name="actionAutosave"/>
     <addaction name="separator"/>
     <addaction name="actionConfigure"/>
-	<addaction name="actionRename"/>
-	<addaction name="actionEditRaster"/>
+    <addaction name="actionRename"/>
+    <addaction name="actionEditRaster"/>
    </widget>
    <addaction name="menuGalvo"/>
    <addaction name="menuSettings"/>
