@@ -7,9 +7,6 @@ from GalvoDriver import *
 from GalvoGraphics import *
 from threading import Timer
 
-lasers = (Laser(name='450 Guide', pin=0), Laser('405 nm', pin=2))
-
-
 def calibrate():
 	global settings
 	scene.reset()
@@ -40,9 +37,10 @@ def import_settings(fname):
 		d = pickle.load(f)
 	ui.setGeometry(*d['window'])
 	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
-	global lasers
-	lasers = [Laser(*d['laser1']), Laser(*d['laser2'])]
-	scene.galvo.setLasers(lasers)
+	scene.galvo.lasers[0].rename(d['laser1'][0])
+	scene.galvo.lasers[0].changePin(d['laser1'][1])
+	scene.galvo.lasers[1].rename(d['laser2'][0])
+	scene.galvo.lasers[1].changePin(d['laser2'][1])
 	scene.center()
 	
 def export_settings(fname):
@@ -53,7 +51,7 @@ def export_settings(fname):
 	h = geom.height()
 	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
 			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
-			'laser1': (lasers[0].name, lasers[0].pin), 'laser2': (lasers[1].name, lasers[1].pin), 'window': list([x, y, w, h])}
+			'laser1': (scene.galvo.lasers[0].name, scene.galvo.lasers[0].pin), 'laser2': (scene.galvo.lasers[1].name, scene.galvo.lasers[1].pin), 'window': list([x, y, w, h])}
 	with open(fname, 'wb') as f:
 		pickle.dump(values, f)
 
@@ -64,67 +62,54 @@ def onOpen(ev):
 		print(e)
 
 def onClose(ev):
-	scene.galvo.stop()
 	scene.galvo.penUp()
 	if ui.actionAutosave.isChecked():
 		export_settings('settings.p')
 	sys.exit(0)
 
-def startThread(duration = -1):	# called from manual, pulse, and continuous
-	scene.crosshair.setVisible(False)
-	if duration > 0:
+def pulsePressed():
+	if ui.continuousButton.isChecked():
 		ui.continuousButton.setChecked(False)
-	if any([shape.selected for shape in scene.getGalvoShapes()]):
-		scene.galvo.draw_shapes([[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected], duration)
-	else:
-		stopThread()
+	startThread()
+	Timer(ui.doubleSpinBox.value(), stopThread).start()
 
+def startThread():
+	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
+	scene.galvo.setShapes(ps)
+	scene.galvo.penDown()
+	if len(ps) > 0:	# run thread to draw shapes
+		scene.galvo.start()
+	
 def stopThread():	# called on manual release, continuous unncheck
-	scene.galvo.stop()
+	scene.galvo.penUp()
 	if ui.continuousButton.isChecked():
 		ui.continuousButton.setChecked(False)
 
-def updateLasers():
-	global lasers
-	if ui.laser1Button.isChecked():
-		lasers[0].activate()
-	else:
-		lasers[0].deactivate()
-	if ui.laser2Button.isChecked():
-		lasers[1].activate()
-	else:
-		lasers[1].deactivate()
-	scene.galvo.setLasers(lasers)
-
 def configure():
-	old_lines = [l.name for l in lasers]	# get lines for lasers
-	for i, laser in enumerate(lasers):
-		result, ok = QtGui.QInputDialog.getItem(ui, "Pin Select", "Select the pin for %s. Currently at pin %d" % (laser.pin, old_lines[i]), ['Pin %d' % i for i in range(8)], editable=False)
+	for laser in scene.galvo.lasers:
+		result, ok = QtGui.QInputDialog.getItem(ui, "Pin Select", "Select the pin for %s. Currently at pin %d" % (laser.name, laser.pin), ['Pin %d' % i for i in range(8)], editable=False)
 		if ok:
-			laser.changePin(int(result.split(' ')[0]))
-	scene.galvo.setLasers(lasers)
+			laser.changePin(int(result.split(' ')[1]))
 
 def rename_lasers():
-	global lasers
-	result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser 1?", text=lasers[0].name)
-	if ok:
-		lasers[0].rename(result)
-		ui.laser1Button.setText(result)
-	result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser 2?", text=lasers[1].name)
-	if ok:
-		lasers[1].rename(result)
-		ui.laser2Button.setText(result)
+	for i, laser in enumerate(scene.galvo.lasers):
+		result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser %d?" % i, text=laser.name)
+		if ok:
+			laser.rename(result)
 	
 def selectionChanged():
-	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
-	scene.galvo.setShapes(ps)
-	if len(ps) == 0:
-		stopThread()
-
-def crosshairMoved(pos):
-	if not scene.galvo.active:
-		scene.galvo.penDown()
-	ui.continuousButton.setChecked(False)
+	if not any([shape.selected for shape in scene.getGalvoShapes()]):
+		scene.galvo.active = False
+		while scene.galvo.isRunning():
+			pass
+		if ui.continuousButton.isChecked():
+			scene.galvo.setShapes([])
+			scene.galvo.penDown()
+		scene.crosshair.setVisible(True)
+	else:
+		if scene.galvo.active and not scene.galvo.isRunning():
+			startThread()
+		scene.crosshair.setVisible(False)
 
 def changeRasterShift():
 	result, ok = QtGui.QInputDialog.getInt(ui, "Raster Shift", "Enter the shift in pixels to translate the laser when rastering polygons:", GalvoShape.RASTER_GAP, min=0)
@@ -136,11 +121,11 @@ ui = uic.loadUi('galvo.ui')
 ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 ui.closeEvent = onClose
 ui.showEvent = onOpen
-scene = GalvoScene(lasers)
-
+scene = GalvoScene()
+scene.galvo.lasers[0].sigRenamed.connect(ui.laser1Button.setText)
+scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)
 
 scene.sigSelectionChanged.connect(selectionChanged)
-scene.crosshair.sigMoved.connect(crosshairMoved)
 
 ui.graphicsView.setScene(scene)
 scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
@@ -152,15 +137,13 @@ ui.closeButton.pressed.connect(ui.close)
 
 ui.manualButton.pressed.connect(startThread)
 ui.manualButton.released.connect(stopThread)
-ui.pulseButton.pressed.connect(lambda : startThread(ui.doubleSpinBox.value()))
+ui.pulseButton.pressed.connect(pulsePressed)
 ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
 
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.opacitySlider.setValue(85)
-ui.laser1Button.toggled.connect(lambda f: updateLasers())
-ui.laser1Button.setText(lasers[0].name)
-ui.laser2Button.toggled.connect(lambda f: updateLasers())
-ui.laser2Button.setText(lasers[1].name)
+ui.laser1Button.toggled.connect(lambda f: scene.galvo.lasers[0].setActive(ui.laser1Button.isChecked()))
+ui.laser2Button.toggled.connect(lambda f: scene.galvo.lasers[1].setActive(ui.laser2Button.isChecked()))
 
 ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)
