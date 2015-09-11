@@ -170,11 +170,11 @@ class GalvoDriver(GalvoBase):
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		#self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
-		#self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
-		#self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
-		#self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ConstSamps, self.bufferSize) # set to maximum speed
+		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+		self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ConstSamps, self.bufferSize) # set to maximum speed
 
 	def updateDigital(self):
 		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
@@ -182,8 +182,8 @@ class GalvoDriver(GalvoBase):
 			for i in self.lasers:
 				if i.active:
 					digital_data[i.pin] = 1
-		#self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
-		print("Toggling: %s" % [l.active and self.active for l in self.lasers])
+		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
+		#print("Toggling: %s" % [l.active and self.active for l in self.lasers])
 
 	def run(self):
 		start = time.clock()
@@ -201,7 +201,7 @@ class GalvoDriver(GalvoBase):
 		if penUp:
 			self.penUp()
 		data = np.array([pos.y(), pos.y(), -pos.x(), -pos.x()], dtype=np.float64)
-		#self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 		#print("Moving: %s" % [l.active and self.active for l in self.lasers])
 		if self.active and penUp:
 			self.penDown()
@@ -216,5 +216,5 @@ class GalvoDriver(GalvoBase):
 			pts.append(p)
 		data = np.array([p[1] for p in pts] + [-p[0] for p in pts], dtype=np.float64) # sent as (y, -x)
 		samps = len(data)//2
-		#self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
-		print("Shape: %s" % [l.active and self.active for l in self.lasers])
+		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		#print("Shape: %s" % [l.active and self.active for l in self.lasers])
