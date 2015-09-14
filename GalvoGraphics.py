@@ -26,7 +26,7 @@ class CrossHair(QtGui.QGraphicsObject):
 		return QtCore.QRectF(-self.size - 1, -self.size - 1, 2 * self.size + 1, 2 * self.size + 1)
 
 class GalvoShape(QtGui.QGraphicsPathItem):
-	RASTER_GAP = 3
+	RASTER_GAP = 10
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
 		super(GalvoShape, self).__init__(self.path)

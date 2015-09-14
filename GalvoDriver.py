@@ -108,9 +108,11 @@ class GalvoScene(QtGui.QGraphicsScene):
 		for i in self.items()[::-1]:
 			if isinstance(i, GalvoShape):
 				self.removeItem(i)
+		self.crosshair.setVisible(True)
 
 	def reset(self):
 		self.galvo.setBounds(QtCore.QRect(-10, -10, 20, 20))
+		self.crosshair.setVisible(True)
 		self.center()
 
 	def mapFromGalvo(self, pt):
@@ -162,7 +164,7 @@ class GalvoDriver(GalvoBase):
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
 	def __init__(self):
 		super(GalvoDriver, self).__init__()
-		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
+		self.sample_rate=4500 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2
 		self.read = int32()
 		self.establishChannels()
@@ -174,7 +176,7 @@ class GalvoDriver(GalvoBase):
 		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
 		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
-		self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ConstSamps, self.bufferSize) # set to maximum speed
+		#self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
 
 	def updateDigital(self):
 		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
