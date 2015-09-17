@@ -8,7 +8,6 @@ import time
 
 class Laser(QtCore.QObject):
 	sigRenamed = QtCore.pyqtSignal(str)
-	sigToggled = QtCore.pyqtSignal()
 	def __init__(self, name, pin):
 		super(Laser, self).__init__()
 		self.name = name
@@ -16,7 +15,6 @@ class Laser(QtCore.QObject):
 		self.active = False
 	def setActive(self, a):
 		self.active = a
-		self.sigToggled.emit()
 	def rename(self, s):
 		self.name = s
 		self.sigRenamed.emit(s)
@@ -49,7 +47,6 @@ class GalvoScene(QtGui.QGraphicsScene):
 
 	def mousePressEvent(self, ev):
 		if ev.button() == QtCore.Qt.RightButton:  # if right button, enable crosshair movement
-			
 			self.crosshair.setPos(ev.scenePos())
 			self.crosshair.dragging = True
 			if not self.crosshair.isVisible():
@@ -109,6 +106,7 @@ class GalvoScene(QtGui.QGraphicsScene):
 			if isinstance(i, GalvoShape):
 				self.removeItem(i)
 		self.crosshair.setVisible(True)
+		self.sigSelectionChanged.emit()
 
 	def reset(self):
 		self.galvo.setBounds(QtCore.QRect(-10, -10, 20, 20))
@@ -135,33 +133,24 @@ class GalvoBase(QtCore.QThread):
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
 	def __init__(self):
 		super(GalvoBase, self).__init__()
-		self.active = False
 		self.lasers = [Laser('Laser 1', 0), Laser('Laser 2', 1)]
-		for l in self.lasers:
-			l.sigToggled.connect(lambda : self.updateDigital() if self.active else None) # only toggle lasers if they are active
 		self.shapes = []
 		self.duration = -1
 
 	def setShapes(self, shapes):
 		self.shapes = shapes
+		if len(shapes) > 0 and not self.isRunning():
+			self.start()
 
 	def setBounds(self, boundRect):
 		self.boundRect = boundRect
-
-	def penDown(self):
-		self.active = True
-		self.updateDigital()
-	
-	def penUp(self):
-		self.active = False
-		while self.isRunning():
-			pass
-		self.updateDigital()
+		
 
 class GalvoDriver(GalvoBase):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
+	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self):
 		super(GalvoDriver, self).__init__()
 		self.sample_rate=4500 # Maximum for the NI PCI-6001 is 5kHz.
@@ -178,45 +167,49 @@ class GalvoDriver(GalvoBase):
 		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
 		#self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
 
-	def updateDigital(self):
+	def setLaserActive(self, num, active):
+		self.lasers[num].setActive(active)
+		self.updateDigital()
+
+	def updateDigital(self, active=True):
 		digital_data = np.uint8([0, 0, 0, 0, 0, 0, 0, 0])
-		if self.active:
+		if active:
 			for i in self.lasers:
 				if i.active:
 					digital_data[i.pin] = 1
 		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
-		#print("Toggling: %s" % [l.active and self.active for l in self.lasers])
+		if any(digital_data) and len(self.shapes) > 0 and not self.isRunning():
+			self.start()
 
 	def run(self):
-		start = time.clock()
-		self.active = True
-		while self.active:
+		while len(self.shapes) > 0 and (self.lasers[0].active or self.lasers[1].active):
 			if len(self.shapes) > 1:	# draw multiple shapes, jumping between
 				for shape in self.shapes:
 					self.moveTo(shape[0], penUp=True)
 					self.write_points(shape)
 			elif len(self.shapes) == 1:	# draw one shape, top to bottom to top again
 				self.write_points(self.shapes[0][:-1] + self.shapes[0][::-1])
+				
+	def mapFromPercent(self, p):
+		p = [self.boundRect.x() + (p.x() * self.boundRect.width()), self.boundRect.y() + (p.y() * self.boundRect.height())]
+		return QtCore.QPointF(max(-10, min(p[0], 10)),  max(-10, min(p[1], 10)))
 
 	def moveTo(self, pos, penUp=False):
+		pos = self.mapFromPercent(pos)
 		self.pos = pos
+		self.sigMoved.emit(pos)
 		if penUp:
-			self.penUp()
+			self.updateDigital(active=False)
 		data = np.array([pos.y(), pos.y(), -pos.x(), -pos.x()], dtype=np.float64)
 		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
-		#print("Moving: %s" % [l.active and self.active for l in self.lasers])
-		if self.active and penUp:
-			self.penDown()
+		if penUp:
+			self.updateDigital()
 
 	def write_points(self, points):
 		self.analog_output.StopTask()
 		pts = []
 		for p in points:
-			p = [self.boundRect.x() + (p.x() * self.boundRect.width()), self.boundRect.y() + (p.y() * self.boundRect.height())]
-			p[0] = max(-10, min(p[0], 10))
-			p[1] = max(-10, min(p[1], 10))
-			pts.append(p)
-		data = np.array([p[1] for p in pts] + [-p[0] for p in pts], dtype=np.float64) # sent as (y, -x)
+			pts.append(self.mapFromPercent(p))
+		data = np.array([p.y() for p in pts] + [-p.x() for p in pts], dtype=np.float64) # sent as (y, -x)
 		samps = len(data)//2
 		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
-		#print("Shape: %s" % [l.active and self.active for l in self.lasers])

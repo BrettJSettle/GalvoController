@@ -30,6 +30,7 @@ def calibrate():
 	scene.removeItem(aim)
 	scene.keyPressEvent = GalvoScene.keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
+	del scene.tempRect
 	ui.infoLabel.setText('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
 
 def import_settings(fname):
@@ -42,7 +43,7 @@ def import_settings(fname):
 	scene.galvo.lasers[1].rename(d['laser2'][0])
 	scene.galvo.lasers[1].changePin(d['laser2'][1])
 	scene.center()
-	
+
 def export_settings(fname):
 	geom = ui.geometry()
 	x = geom.x()
@@ -62,28 +63,16 @@ def onOpen(ev):
 		print(e)
 
 def onClose(ev):
-	scene.galvo.penUp()
+	scene.galvo.setLaserActive(0, False)
+	scene.galvo.setLaserActive(1, False)
 	if ui.actionAutosave.isChecked():
 		export_settings('settings.p')
 	sys.exit(0)
 
-def pulsePressed():
-	if ui.continuousButton.isChecked():
-		ui.continuousButton.setChecked(False)
-	startThread()
-	Timer(ui.doubleSpinBox.value(), stopThread).start()
-
-def startThread():
-	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
-	scene.galvo.setShapes(ps)
-	scene.galvo.penDown()
-	if len(ps) > 0:	# run thread to draw shapes
-		scene.galvo.start()
-	
-def stopThread():	# called on manual release, continuous unncheck
-	scene.galvo.penUp()
-	if ui.continuousButton.isChecked():
-		ui.continuousButton.setChecked(False)
+def pulsePressed(num):
+	scene.galvo.setLaserActive(num, True)
+	val = ui.pulseSpin.value() if num == 0 else ui.pulse2Spin.value()
+	Timer(val, lambda : scene.galvo.setLaserActive(num, False)).start()
 
 def configure():
 	for laser in scene.galvo.lasers:
@@ -96,20 +85,11 @@ def rename_lasers():
 		result, ok = QtGui.QInputDialog.getText(ui, "Laser Name", "What is a name for laser %d?" % i, text=laser.name)
 		if ok:
 			laser.rename(result)
-	
+
 def selectionChanged():
-	if not any([shape.selected for shape in scene.getGalvoShapes()]):
-		scene.galvo.active = False
-		while scene.galvo.isRunning():
-			pass
-		if ui.continuousButton.isChecked():
-			scene.galvo.setShapes([])
-			scene.galvo.penDown()
-		scene.crosshair.setVisible(True)
-	else:
-		if scene.galvo.active and not scene.galvo.isRunning():
-			startThread()
-		scene.crosshair.setVisible(False)
+	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
+	scene.galvo.setShapes(ps)
+	scene.crosshair.setVisible(not any([shape.selected for shape in scene.getGalvoShapes()]))
 
 def changeRasterShift():
 	result, ok = QtGui.QInputDialog.getInt(ui, "Raster Shift", "Enter the shift in pixels to translate the laser when rastering polygons:", GalvoShape.RASTER_GAP, min=0)
@@ -126,6 +106,7 @@ scene.galvo.lasers[0].sigRenamed.connect(ui.laser1Button.setText)
 scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)
 
 scene.sigSelectionChanged.connect(selectionChanged)
+scene.galvo.sigMoved.connect(lambda pos: ui.statusBar().showMessage("Mouse at (%.2f, %.2f)" % (pos.x(), pos.y())))
 
 ui.graphicsView.setScene(scene)
 scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
@@ -135,15 +116,18 @@ ui.clearButton.pressed.connect(scene.clear)
 ui.resetButton.pressed.connect(scene.reset)
 ui.closeButton.pressed.connect(ui.close)
 
-ui.manualButton.pressed.connect(startThread)
-ui.manualButton.released.connect(stopThread)
-ui.pulseButton.pressed.connect(pulsePressed)
-ui.continuousButton.toggled.connect(lambda f: startThread() if f else stopThread())
+ui.laser1Button.toggled.connect(lambda f: scene.galvo.setLaserActive(0, f))
+ui.manualButton.pressed.connect(lambda : scene.galvo.setLaserActive(0, True))
+ui.manualButton.released.connect(lambda : scene.galvo.setLaserActive(0, False))
+ui.pulseButton.pressed.connect(lambda : pulsePressed(0))
+
+ui.laser2Button.toggled.connect(lambda f: scene.galvo.setLaserActive(1, f))
+ui.manual2Button.pressed.connect(lambda : scene.galvo.setLaserActive(1, True))
+ui.manual2Button.released.connect(lambda : scene.galvo.setLaserActive(1, False))
+ui.pulse2Button.pressed.connect(lambda : pulsePressed(1))
 
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.opacitySlider.setValue(85)
-ui.laser1Button.toggled.connect(lambda f: scene.galvo.lasers[0].setActive(ui.laser1Button.isChecked()))
-ui.laser2Button.toggled.connect(lambda f: scene.galvo.lasers[1].setActive(ui.laser2Button.isChecked()))
 
 ui.actionConfigure.triggered.connect(configure)
 ui.actionCalibrate.triggered.connect(calibrate)
