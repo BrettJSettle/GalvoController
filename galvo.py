@@ -14,7 +14,8 @@ def calibrate():
 	aim = QtGui.QGraphicsRectItem(aimRect)
 	aim.setBrush(QtGui.QColor(255, 0, 0))
 	scene.addItem(aim)
-	ui.infoLabel.setText('Resize the window, drag the laser to the top left corner, then press any key')
+	font = QtGui.QFont("Helvetica", 24, 3)
+	ti = scene.addText('Position the laser in optimal top\n   left, then press any key', font = font)
 	scene.keyPressEvent = lambda ev: setattr(scene, 'tempRect', QtCore.QRectF(scene.galvo.pos, QtCore.QSizeF()))
 	while not hasattr(scene, 'tempRect'):
 		QtGui.qApp.processEvents()
@@ -23,7 +24,7 @@ def calibrate():
 	aimRect.moveTo(ui.graphicsView.mapToScene(ui.graphicsView.width() - 20, ui.graphicsView.height() - 20))
 	aim.setRect(aimRect)
 	scene.keyPressEvent = lambda ev: scene.tempRect.setSize(QtCore.QSizeF(scene.galvo.pos.x() - scene.tempRect.x(), scene.galvo.pos.y() - scene.tempRect.y()))
-	ui.infoLabel.setText('Now drag the laser to the bottom right and press any key')
+	ti.setText('Now position the laser in optimal bottom right, and press a key')
 	while scene.tempRect.isEmpty():
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
@@ -31,7 +32,7 @@ def calibrate():
 	scene.keyPressEvent = GalvoScene.keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
 	del scene.tempRect
-	ui.infoLabel.setText('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
+	scene.removeItem(ti)#('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
 
 def import_settings(fname):
 	with open(fname, 'rb') as f:
@@ -96,6 +97,13 @@ def changeRasterShift():
 	if ok:
 		GalvoShape.RASTER_GAP = result
 
+def traceLine():
+	l = [shape for shape in scene.getGalvoShapes() if shape.selected and not isinstance(shape, GalvoShape)]
+	if len(l) > 1:
+		print("Can only draw one line at a time")
+		return
+	scene.galvo.timedDraw(l[0].rasterPoints(), ui.traceSpin.value())
+
 cur_shape = None
 ui = uic.loadUi('galvo.ui')
 ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
@@ -127,6 +135,7 @@ ui.manual2Button.released.connect(lambda : scene.galvo.setLaserActive(1, False))
 ui.pulse2Button.pressed.connect(lambda : pulsePressed(1))
 ui.roiButton.pressed.connect(lambda : scene.setDrawMethod('ROI'))
 ui.lineButton.pressed.connect(lambda : scene.setDrawMethod('Line'))
+ui.traceButton.pressed.connect(traceLine)
 
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.opacitySlider.setValue(85)

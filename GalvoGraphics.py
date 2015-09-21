@@ -30,24 +30,35 @@ class GalvoLine(QtGui.QGraphicsPathItem):
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
 		super(GalvoLine, self).__init__(self.path)
-
+		self.start = pos
+		self.end = pos
 		self.path_pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
 		self.path_pen.setWidth(2)
 		self.setPen(self.path_pen)
 		self.setPath(self.path)
 		self.mouseIsOver = False
-		self.selected = False
+		self.selected = True
 
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		painter.setPen(QtGui.QColor(0, 255, 0))
+		painter.drawText(self.start.x(), self.start.y(), 'S')
+		painter.setPen(QtGui.QColor(255, 0, 0))
+		painter.drawText(self.end.x(), self.end.y(), 'E')
+
+	def boundingRect(self):
+		newRect = QtGui.QGraphicsPathItem.boundingRect(self)
+		newRect.adjust(-5, -5, 5, 5)
+		return newRect
 
 	def mouseOver(self, pos):
-		self.mouseIsOver = self.path.contains(pos)
+		self.mouseIsOver = self.boundingRect().contains(pos)
 
 	def addPoint(self, p):
 		self.path.lineTo(p)
 		self.setPath(self.path)
+		self.end = p
 		self.update()
 
 	def setSelected(self, s):
@@ -72,6 +83,9 @@ class GalvoShape(GalvoLine):
 		ps = self.rasterPoints()
 		if len(ps) > 0:
 			painter.drawPoints(*ps)
+
+	def mouseOver(self, pos):
+		self.mouseIsOver = self.path.contains(pos)
 
 	def close(self):
 		self.path.closeSubpath()

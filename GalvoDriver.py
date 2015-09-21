@@ -111,7 +111,7 @@ class GalvoScene(QtGui.QGraphicsScene):
 
 	def clear(self):
 		for i in self.items()[::-1]:
-			if isinstance(i, GalvoShape):
+			if isinstance(i, GalvoLine):
 				self.removeItem(i)
 		self.crosshair.setVisible(True)
 		self.sigSelectionChanged.emit()
@@ -172,7 +172,7 @@ class GalvoDriver(GalvoBase):
 		#self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
 		#self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
-		#self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
+		#self.analog_output.CfgSam pClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
 
 	def setLaserActive(self, num, active):
 		self.lasers[num].setActive(active)
@@ -187,6 +187,13 @@ class GalvoDriver(GalvoBase):
 		#self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
 		if any(digital_data) and len(self.shapes) > 0 and not self.isRunning():
 			self.start()
+
+	def timedDraw(self, points, totalTime):
+		pps = int(1. / totalTime * len(points))
+		print("%d points at %d points per second" % (len(points), pps))
+		for p in points:
+			print(p)
+			time.sleep(1. / pps)
 
 	def run(self):
 		while len(self.shapes) > 0 and (self.lasers[0].active or self.lasers[1].active):
