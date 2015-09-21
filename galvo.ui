@@ -20,6 +20,13 @@
       <property name="horizontalSpacing">
        <number>8</number>
       </property>
+      <item row="2" column="2">
+       <widget class="QPushButton" name="closeButton">
+        <property name="text">
+         <string>Close</string>
+        </property>
+       </widget>
+      </item>
       <item row="0" column="0" colspan="3">
        <widget class="QLabel" name="infoLabel">
         <property name="font">
@@ -52,13 +59,6 @@
        <widget class="QLabel" name="opacityLabel">
         <property name="text">
          <string>Window Opacity</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="2">
-       <widget class="QPushButton" name="closeButton">
-        <property name="text">
-         <string>Close</string>
         </property>
        </widget>
       </item>
@@ -125,14 +125,9 @@
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
 &lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Select lasers to use with the buttons below.&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Select mode (LASERS WILL NOT TURN ON IF NO MODE IS SELECTED):&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;*Pulse: Illuminates selected ROI or crosshair for a set time&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;*Manual: Illuminates selected ROI/cursor while held&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;*Continuous: Constantly illuminates ROIs/cursor until unchecked&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;3. Mouse Controls&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;*Left Click to selec/draw ROIs (Hold ctrl to select multiple)&lt;/p&gt;
-&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;*Right Click/Drag to position the cursor&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Select Laser Buttons to toggle, or manually pulse lasers.&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Drag crosshair with right mousebutton.&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Draw and select ROIs with left mousebutton.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
          <property name="verticalScrollBarPolicy">
           <enum>Qt::ScrollBarAlwaysOff</enum>
@@ -153,7 +148,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>390</y>
+           <y>460</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -166,7 +161,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>470</y>
+           <y>540</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -179,7 +174,7 @@ p, li { white-space: pre-wrap; }
          <property name="geometry">
           <rect>
            <x>0</x>
-           <y>430</y>
+           <y>500</y>
            <width>91</width>
            <height>31</height>
           </rect>
@@ -312,6 +307,47 @@ p, li { white-space: pre-wrap; }
          </property>
          <property name="text">
           <string>Manual</string>
+         </property>
+        </widget>
+        <widget class="QPushButton" name="roiButton">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>360</y>
+           <width>41</width>
+           <height>23</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>ROI</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+         <property name="autoExclusive">
+          <bool>true</bool>
+         </property>
+        </widget>
+        <widget class="QPushButton" name="lineButton">
+         <property name="geometry">
+          <rect>
+           <x>50</x>
+           <y>360</y>
+           <width>41</width>
+           <height>23</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Line</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="autoExclusive">
+          <bool>true</bool>
          </property>
         </widget>
        </widget>

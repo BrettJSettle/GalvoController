@@ -25,11 +25,11 @@ class CrossHair(QtGui.QGraphicsObject):
 		'''shape to draw in'''
 		return QtCore.QRectF(-self.size - 1, -self.size - 1, 2 * self.size + 1, 2 * self.size + 1)
 
-class GalvoShape(QtGui.QGraphicsPathItem):
+class GalvoLine(QtGui.QGraphicsPathItem):
 	RASTER_GAP = 10
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
-		super(GalvoShape, self).__init__(self.path)
+		super(GalvoLine, self).__init__(self.path)
 
 		self.path_pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
 		self.path_pen.setWidth(2)
@@ -41,9 +41,6 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
-		ps = self.rasterPoints()
-		if len(ps) > 0:
-			painter.drawPoints(*ps)
 
 	def mouseOver(self, pos):
 		self.mouseIsOver = self.path.contains(pos)
@@ -61,6 +58,20 @@ class GalvoShape(QtGui.QGraphicsPathItem):
 			self.path_pen.setColor(QtGui.QColor(0, 0, 255))
 		self.setPen(self.path_pen)
 		self.update()
+
+	def rasterPoints(self):
+		return [self.path.pointAtPercent(i / 100.) for i in range(101)]
+
+class GalvoShape(GalvoLine):
+	def __init__(self, pos):
+		super(GalvoShape, self).__init__(pos)
+
+	def paint(self, painter, option, *arg):
+		painter.setRenderHint(QtGui.QPainter.Antialiasing)
+		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		ps = self.rasterPoints()
+		if len(ps) > 0:
+			painter.drawPoints(*ps)
 
 	def close(self):
 		self.path.closeSubpath()

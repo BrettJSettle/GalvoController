@@ -125,6 +125,8 @@ ui.laser2Button.toggled.connect(lambda f: scene.galvo.setLaserActive(1, f))
 ui.manual2Button.pressed.connect(lambda : scene.galvo.setLaserActive(1, True))
 ui.manual2Button.released.connect(lambda : scene.galvo.setLaserActive(1, False))
 ui.pulse2Button.pressed.connect(lambda : pulsePressed(1))
+ui.roiButton.pressed.connect(lambda : scene.setDrawMethod('ROI'))
+ui.lineButton.pressed.connect(lambda : scene.setDrawMethod('Line'))
 
 ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 ui.opacitySlider.setValue(85)

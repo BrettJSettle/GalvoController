@@ -30,6 +30,10 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.addItem(self.crosshair)
 		self.galvo = GalvoDriver()
 		self.crosshair.dragging = False
+		self.drawMethod = 'ROI'
+
+	def setDrawMethod(self, s):
+		self.drawMethod = s
 
 	def crosshairMoved(self, pos):
 		pos = self.mapToGalvo(pos)
@@ -43,7 +47,7 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.crosshair.setPos(self.views()[0].mapToScene(self.views()[0].width() * .5, self.views()[0].height() * .5))
 
 	def getGalvoShapes(self):
-		return [i for i in self.items()[::-1] if isinstance(i, GalvoShape)]
+		return [i for i in self.items()[::-1] if isinstance(i, GalvoLine)]
 
 	def mousePressEvent(self, ev):
 		if ev.button() == QtCore.Qt.RightButton:  # if right button, enable crosshair movement
@@ -73,7 +77,10 @@ class GalvoScene(QtGui.QGraphicsScene):
 						
 			self.sigSelectionChanged.emit()
 			if not toggled:					# if none are selected, create a new shape
-				self.cur_shape = GalvoShape(ev.scenePos())
+				if self.drawMethod == "ROI":
+					self.cur_shape = GalvoShape(ev.scenePos())
+				else:
+					self.cur_shape = GalvoLine(ev.scenePos())
 				self.addItem(self.cur_shape)
 
 	def mouseMoveEvent(self, ev):
@@ -90,7 +97,8 @@ class GalvoScene(QtGui.QGraphicsScene):
 		if self.crosshair.dragging:
 			self.crosshair.dragging = False
 		elif hasattr(self, 'cur_shape'):
-			self.cur_shape.close()
+			if self.drawMethod == 'ROI':
+				self.cur_shape.close()
 			del self.cur_shape
 		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
 
@@ -131,6 +139,7 @@ class GalvoBase(QtCore.QThread):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
+	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self):
 		super(GalvoBase, self).__init__()
 		self.lasers = [Laser('Laser 1', 0), Laser('Laser 2', 1)]
@@ -150,21 +159,19 @@ class GalvoDriver(GalvoBase):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
-	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self):
 		super(GalvoDriver, self).__init__()
 		self.sample_rate=4500 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2
 		self.read = int32()
 		self.establishChannels()
-		self.pos = QtCore.QPointF()
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
-		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		#self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		#self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
-		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+		#self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
 		#self.analog_output.CfgSampClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
 
 	def setLaserActive(self, num, active):
@@ -177,7 +184,7 @@ class GalvoDriver(GalvoBase):
 			for i in self.lasers:
 				if i.active:
 					digital_data[i.pin] = 1
-		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
+		#self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
 		if any(digital_data) and len(self.shapes) > 0 and not self.isRunning():
 			self.start()
 
@@ -190,18 +197,17 @@ class GalvoDriver(GalvoBase):
 			elif len(self.shapes) == 1:	# draw one shape, top to bottom to top again
 				self.write_points(self.shapes[0][:-1] + self.shapes[0][::-1])
 				
-	def mapFromPercent(self, p):
+	def mapFromPercent(self, p): 
 		p = [self.boundRect.x() + (p.x() * self.boundRect.width()), self.boundRect.y() + (p.y() * self.boundRect.height())]
 		return QtCore.QPointF(max(-10, min(p[0], 10)),  max(-10, min(p[1], 10)))
 
 	def moveTo(self, pos, penUp=False):
 		pos = self.mapFromPercent(pos)
-		self.pos = pos
 		self.sigMoved.emit(pos)
 		if penUp:
 			self.updateDigital(active=False)
 		data = np.array([pos.y(), pos.y(), -pos.x(), -pos.x()], dtype=np.float64)
-		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		#self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 		if penUp:
 			self.updateDigital()
 
@@ -212,4 +218,4 @@ class GalvoDriver(GalvoBase):
 			pts.append(self.mapFromPercent(p))
 		data = np.array([p.y() for p in pts] + [-p.x() for p in pts], dtype=np.float64) # sent as (y, -x)
 		samps = len(data)//2
-		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		#self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
