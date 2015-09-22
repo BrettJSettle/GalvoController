@@ -24,7 +24,7 @@ def calibrate():
 	aimRect.moveTo(ui.graphicsView.mapToScene(ui.graphicsView.width() - 20, ui.graphicsView.height() - 20))
 	aim.setRect(aimRect)
 	scene.keyPressEvent = lambda ev: scene.tempRect.setSize(QtCore.QSizeF(scene.galvo.pos.x() - scene.tempRect.x(), scene.galvo.pos.y() - scene.tempRect.y()))
-	ti.setText('Now position the laser in optimal bottom right, and press a key')
+	ti.setPlainText('Now position the laser in optimal bottom right, and press a key')
 	while scene.tempRect.isEmpty():
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
@@ -88,7 +88,7 @@ def rename_lasers():
 			laser.rename(result)
 
 def selectionChanged():
-	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected]
+	ps = [[scene.mapToGalvo(p) for p in shape.rasterPoints()] for shape in scene.getGalvoShapes() if shape.selected and type(shape) == GalvoShape]
 	scene.galvo.setShapes(ps)
 	scene.crosshair.setVisible(not any([shape.selected for shape in scene.getGalvoShapes()]))
 
@@ -99,10 +99,11 @@ def changeRasterShift():
 
 def traceLine():
 	l = [shape for shape in scene.getGalvoShapes() if shape.selected and not isinstance(shape, GalvoShape)]
-	if len(l) > 1:
+	if len(l) != 1:
 		print("Can only draw one line at a time")
 		return
-	scene.galvo.timedDraw(l[0].rasterPoints(), ui.traceSpin.value())
+	points = [scene.mapToGalvo(p) for p in l[0].rasterPoints(300)]
+	scene.galvo.timedDraw(points, ui.traceSpin.value())
 
 cur_shape = None
 ui = uic.loadUi('galvo.ui')

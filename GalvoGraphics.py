@@ -11,8 +11,19 @@ class CrossHair(QtGui.QGraphicsObject):
 		self.setZValue(10)
 		self.setPos(pos)
 		self.size = size
-		self.xChanged.connect(lambda : self.sigMoved.emit(self.pos()))
-		self.yChanged.connect(lambda: self.sigMoved.emit(self.pos()))
+		self.newPos = [None, None]
+		self.xChanged.connect(lambda : self.setCoord(x=self.pos().x))
+		self.yChanged.connect(lambda: self.setCoord(y=self.pos().y))
+
+	def setCoord(self, x=None, y=None):
+		if x != None:
+			self.newPos[0] = x
+		elif y != None:
+			self.newPos[1] = y
+
+		if all(self.newPos):
+			self.sigMoved.emit(self.pos())
+			self.newPos = [None, None]
 
 	def paint(self, painter, option, widget):
 		'''paint the crosshair'''
@@ -70,8 +81,8 @@ class GalvoLine(QtGui.QGraphicsPathItem):
 		self.setPen(self.path_pen)
 		self.update()
 
-	def rasterPoints(self):
-		return [self.path.pointAtPercent(i / 100.) for i in range(101)]
+	def rasterPoints(self, count):
+		return [self.path.pointAtPercent(i / float(count)) for i in range(count)]
 
 class GalvoShape(GalvoLine):
 	def __init__(self, pos):

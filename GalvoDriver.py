@@ -161,18 +161,18 @@ class GalvoDriver(GalvoBase):
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
 	def __init__(self):
 		super(GalvoDriver, self).__init__()
-		self.sample_rate=4500 # Maximum for the NI PCI-6001 is 5kHz.
+		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2
 		self.read = int32()
 		self.establishChannels()
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		#self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
-		#self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
-		#self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
-		#self.analog_output.CfgSam pClkTiming("", self.sample_rate, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) # set to maximum speed
+		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+		#self.analog_output.CfgSampClkTiming("", 50, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) 
 
 	def setLaserActive(self, num, active):
 		self.lasers[num].setActive(active)
@@ -184,16 +184,17 @@ class GalvoDriver(GalvoBase):
 			for i in self.lasers:
 				if i.active:
 					digital_data[i.pin] = 1
-		#self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
+		self.digital_output.WriteDigitalLines(1,1,-1,DAQmx_Val_ChanForAllLines,digital_data,None,None)
 		if any(digital_data) and len(self.shapes) > 0 and not self.isRunning():
 			self.start()
 
 	def timedDraw(self, points, totalTime):
 		pps = int(1. / totalTime * len(points))
-		print("%d points at %d points per second" % (len(points), pps))
+		print("Drawing %d points at %d points per second" % (len(points), pps))
 		for p in points:
-			print(p)
+			self.moveTo(p)
 			time.sleep(1. / pps)
+			QtGui.QApplication.processEvents()
 
 	def run(self):
 		while len(self.shapes) > 0 and (self.lasers[0].active or self.lasers[1].active):
@@ -210,11 +211,12 @@ class GalvoDriver(GalvoBase):
 
 	def moveTo(self, pos, penUp=False):
 		pos = self.mapFromPercent(pos)
+		self.pos = pos
 		self.sigMoved.emit(pos)
 		if penUp:
 			self.updateDigital(active=False)
 		data = np.array([pos.y(), pos.y(), -pos.x(), -pos.x()], dtype=np.float64)
-		#self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 		if penUp:
 			self.updateDigital()
 
@@ -225,4 +227,4 @@ class GalvoDriver(GalvoBase):
 			pts.append(self.mapFromPercent(p))
 		data = np.array([p.y() for p in pts] + [-p.x() for p in pts], dtype=np.float64) # sent as (y, -x)
 		samps = len(data)//2
-		#self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
+		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
