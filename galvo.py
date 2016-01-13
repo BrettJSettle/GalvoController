@@ -2,14 +2,15 @@ from PyQt4 import QtCore, QtGui, uic
 import numpy as np
 import pickle
 app = QtGui.QApplication([])
-import time, sys
+import time, sys, os
 from GalvoDriver import *
 from GalvoGraphics import *
 from threading import Timer
+import global_vars as g
 
 def calibrate():
 	global settings
-	scene.reset()
+	g.reset()
 	aimRect = QtCore.QRectF(ui.graphicsView.mapToScene(0, 0), ui.graphicsView.mapToScene(20, 20))
 	aim = QtGui.QGraphicsRectItem(aimRect)
 	aim.setBrush(QtGui.QColor(255, 0, 0))
@@ -20,11 +21,10 @@ def calibrate():
 	while not hasattr(scene, 'tempRect'):
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
-
 	aimRect.moveTo(ui.graphicsView.mapToScene(ui.graphicsView.width() - 20, ui.graphicsView.height() - 20))
 	aim.setRect(aimRect)
 	scene.keyPressEvent = lambda ev: scene.tempRect.setSize(QtCore.QSizeF(scene.galvo.pos.x() - scene.tempRect.x(), scene.galvo.pos.y() - scene.tempRect.y()))
-	ti.setPlainText('Now position the laser in optimal bottom right, and press a key')
+	ti.setPlainText('Now position the laser in optimal bottom \n      right, and press a key')
 	while scene.tempRect.isEmpty():
 		QtGui.qApp.processEvents()
 		time.sleep(.01)
@@ -34,46 +34,16 @@ def calibrate():
 	del scene.tempRect
 	scene.removeItem(ti)#('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
 
-def import_settings(fname):
-	with open(fname, 'rb') as f:
-		d = pickle.load(f)
-	ui.setGeometry(*d['window'])
-	scene.galvo.setBounds(QtCore.QRectF(d['galvo_x'], d['galvo_y'], d['galvo_width'], d['galvo_height']))
-	scene.galvo.lasers[0].rename(d['laser1'][0])
-	scene.galvo.lasers[0].changePin(d['laser1'][1])
-	scene.galvo.lasers[1].rename(d['laser2'][0])
-	scene.galvo.lasers[1].changePin(d['laser2'][1])
-	scene.center()
-
-def export_settings(fname):
-	geom = ui.geometry()
-	x = geom.x()
-	y = geom.y()
-	w = geom.width()
-	h = geom.height()
-	values = {'galvo_x': scene.galvo.boundRect.x(), 'galvo_y': scene.galvo.boundRect.y(), \
-			'galvo_width': scene.galvo.boundRect.width(), 'galvo_height': scene.galvo.boundRect.height(),\
-			'laser1': (scene.galvo.lasers[0].name, scene.galvo.lasers[0].pin), 'laser2': (scene.galvo.lasers[1].name, scene.galvo.lasers[1].pin), 'window': list([x, y, w, h])}
-	with open(fname, 'wb') as f:
-		pickle.dump(values, f)
-
-def onOpen(ev):
-	try:
-		import_settings('settings.p')
-	except Exception as e:
-		print(e)
-
-def onClose(ev):
-	scene.galvo.setLaserActive(0, False)
-	scene.galvo.setLaserActive(1, False)
-	if ui.actionAutosave.isChecked():
-		export_settings('settings.p')
-	sys.exit(0)
 
 def pulsePressed(num):
-	scene.galvo.setLaserActive(num, True)
-	val = ui.pulseSpin.value() if num == 0 else ui.pulse2Spin.value()
-	Timer(val, lambda : scene.galvo.setLaserActive(num, False)).start()
+	pulse_time = ui.pulseSpin.value() / 1000.0
+	if scene.drawMethod == 'Line':
+		scene.galvo.setLaserActive(num, True)
+		scene.galvo.write_points(scene.line.rasterPoints())
+		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
+	else:
+		scene.galvo.setLaserActive(num, True)
+		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
 
 def configure():
 	for laser in scene.galvo.lasers:
@@ -97,58 +67,64 @@ def changeRasterShift():
 	if ok:
 		GalvoShape.RASTER_GAP = result
 
-def traceLine():
-	l = [shape for shape in scene.getGalvoShapes() if shape.selected and not isinstance(shape, GalvoShape)]
-	if len(l) != 1:
-		print("Can only draw one line at a time")
-		return
-	points = [scene.mapToGalvo(p) for p in l[0].rasterPoints(300)]
-	scene.galvo.timedDraw(points, ui.traceSpin.value())
+def closeCommandPrompt():
+    from ctypes import windll
+    GetConsoleWindow = windll.kernel32.GetConsoleWindow
+    console_window_handle = GetConsoleWindow()
+    ShowWindow = windll.user32.ShowWindow
+    ShowWindow(console_window_handle, 0)
 
-cur_shape = None
-ui = uic.loadUi('galvo.ui')
-ui.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-ui.closeEvent = onClose
-ui.showEvent = onOpen
-scene = GalvoScene()
-scene.galvo.lasers[0].sigRenamed.connect(ui.laser1Button.setText)
-scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)
+def pressed(num):
+	button = ui.laser1Button if num == 0 else ui.laser2Button
+	button.presstime = time.time()
+	if not button.isChecked():
+		scene.galvo.setLaserActive(num, True)
 
-scene.sigSelectionChanged.connect(selectionChanged)
-scene.galvo.sigMoved.connect(lambda pos: ui.statusBar().showMessage("Mouse at (%.2f, %.2f)" % (pos.x(), pos.y())))
+def released(num):
+	button = ui.laser1Button if num == 0 else ui.laser2Button
+	if time.time() - button.presstime > .2: # used as manual button
+		button.setChecked(False)
+		scene.galvo.setLaserActive(num, False)
+	elif not button.isChecked():
+		scene.galvo.setLaserActive(num, button.isChecked())
 
-ui.graphicsView.setScene(scene)
-scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
+def connectUi():
+	ui.clearButton.pressed.connect(scene.clear)
+	ui.closeButton.pressed.connect(ui.close)
 
-ui.calibrateButton.pressed.connect(calibrate)
-ui.clearButton.pressed.connect(scene.clear)
-ui.resetButton.pressed.connect(scene.reset)
-ui.closeButton.pressed.connect(ui.close)
+	ui.laser1Button.pressed.connect(lambda : pressed(0))
+	ui.laser1Button.released.connect(lambda : released(0))
+	ui.pulseButton.pressed.connect(lambda : pulsePressed(0))
 
-ui.laser1Button.toggled.connect(lambda f: scene.galvo.setLaserActive(0, f))
-ui.manualButton.pressed.connect(lambda : scene.galvo.setLaserActive(0, True))
-ui.manualButton.released.connect(lambda : scene.galvo.setLaserActive(0, False))
-ui.pulseButton.pressed.connect(lambda : pulsePressed(0))
+	ui.laser2Button.pressed.connect(lambda : pressed(1))
+	ui.laser2Button.released.connect(lambda : released(1))
+	ui.pulse2Button.pressed.connect(lambda : pulsePressed(1))
 
-ui.laser2Button.toggled.connect(lambda f: scene.galvo.setLaserActive(1, f))
-ui.manual2Button.pressed.connect(lambda : scene.galvo.setLaserActive(1, True))
-ui.manual2Button.released.connect(lambda : scene.galvo.setLaserActive(1, False))
-ui.pulse2Button.pressed.connect(lambda : pulsePressed(1))
-ui.roiButton.pressed.connect(lambda : scene.setDrawMethod('ROI'))
-ui.lineButton.pressed.connect(lambda : scene.setDrawMethod('Line'))
-ui.traceButton.pressed.connect(traceLine)
+	ui.roiButton.pressed.connect(lambda : scene.setDrawMethod('ROI'))
+	ui.lineButton.pressed.connect(lambda : scene.setDrawMethod('Line'))
+	ui.pointButton.pressed.connect(lambda : scene.setDrawMethod('Point'))
+	ui.lineSepCounter.valueChanged.connect(lambda v: setattr(g, 'line_intervals', v))
+	ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
+	ui.opacitySlider.setValue(85)
 
-ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
-ui.opacitySlider.setValue(85)
+	ui.actionConfigure.triggered.connect(configure)
+	ui.actionCalibrate.triggered.connect(calibrate)
+	ui.actionReset.triggered.connect(g.reset)
+	ui.actionRename.triggered.connect(rename_lasers)
+	ui.actionEditRaster.triggered.connect(changeRasterShift)
+	ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
+	ui.actionImport.triggered.connect(lambda : g.import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)')))
+	ui.actionExport.triggered.connect(lambda : g.export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)')))
+	
+	scene.galvo.lasers[0].sigRenamed.connect(ui.laser1Button.setText)
+	scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)
 
-ui.actionConfigure.triggered.connect(configure)
-ui.actionCalibrate.triggered.connect(calibrate)
-ui.actionReset.triggered.connect(scene.reset)
-ui.actionRename.triggered.connect(rename_lasers)
-ui.actionEditRaster.triggered.connect(changeRasterShift)
-ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
-ui.actionImport.triggered.connect(lambda : import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)')))
-ui.actionExport.triggered.connect(lambda : export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)')))
-
-ui.show()
-app.exec_()
+if __name__ == '__main__':
+    if os.name =='nt' and '-debug' not in sys.argv:
+        closeCommandPrompt()
+    else:
+    	g.DEBUG = True
+    ui, scene = g.initUiAndScene('galvoAlternate.ui')
+    connectUi()
+    ui.show()
+    app.exec_() 

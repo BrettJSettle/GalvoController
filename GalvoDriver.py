@@ -2,8 +2,19 @@ from PyQt4 import QtGui, QtCore
 import numpy as np
 from GalvoGraphics import *
 import sys
-from PyDAQmx import *
-from PyDAQmx.DAQmxCallBack import *
+import global_vars as g
+if not g.DEBUG:
+	try:
+		from PyDAQmx import *
+		from PyDAQmx.DAQmxCallBack import *
+	except:
+		DAQmx_Val_Volts = 'DAQmx_Val_Volts'
+		DAQmx_Val_ChanForAllLines = 'DAQmx_Val_ChanForAllLines'
+		DAQmx_Val_GroupByChannel = "DAQmx_Val_GroupByChannel"
+		print("Could not import PyDAQmx. Running in Debug mode")
+		def byref(s):
+			return "ref(%s)" % s
+		g.DEBUG = True
 import time
 
 class Laser(QtCore.QObject):
@@ -28,12 +39,21 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.crosshair = CrossHair()
 		self.crosshair.sigMoved.connect(self.crosshairMoved)
 		self.addItem(self.crosshair)
+		self.line = GalvoStraightLine(QtCore.QPointF(0, 0), QtCore.QPointF(0, 0))
+		self.line.setVisible(False)
+		self.addItem(self.line)
+		self.rois = []
 		self.galvo = GalvoDriver()
 		self.crosshair.dragging = False
-		self.drawMethod = 'ROI'
+		self.drawing_line = False
+		self.drawMethod = 'Point'
 
 	def setDrawMethod(self, s):
 		self.drawMethod = s
+		self.crosshair.setVisible(s == 'Point')
+		self.line.setVisible(s == 'Line')
+		for roi in self.rois:
+			roi.setVisible(s == 'ROI')
 
 	def crosshairMoved(self, pos):
 		pos = self.mapToGalvo(pos)
@@ -44,70 +64,53 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.galvo.moveTo(pos)
 	
 	def center(self):
+		self.setDrawMethod("Point")
 		self.crosshair.setPos(self.views()[0].mapToScene(self.views()[0].width() * .5, self.views()[0].height() * .5))
-
-	def getGalvoShapes(self):
-		return [i for i in self.items()[::-1] if isinstance(i, GalvoLine)]
 
 	def mousePressEvent(self, ev):
 		if ev.button() == QtCore.Qt.RightButton:  # if right button, enable crosshair movement
-			self.crosshair.setPos(ev.scenePos())
-			self.crosshair.dragging = True
-			if not self.crosshair.isVisible():
-				self.crosshair.setVisible(True)
-			for sh in self.getGalvoShapes():
-				sh.setSelected(False)
-				self.sigSelectionChanged.emit()
+			if self.drawMethod =='Point':
+				self.crosshair.setPos(ev.scenePos())
+				self.crosshair.dragging = True
+			elif self.drawMethod =='ROI':
+				for i in range(len(self.rois) - 1, -1, -1):
+					if self.rois[i].mouseOver(ev.scenePos()):
+						self.rois.pop(i)
 			QtGui.QGraphicsScene.mousePressEvent(self, ev)
-
 		elif ev.button() == QtCore.Qt.LeftButton:	# draw shapes
-			toggled = False	
-			if int(ev.modifiers()) == QtCore.Qt.ControlModifier:	# if control held, just toggle all shapes under mouse
-				for sh in self.getGalvoShapes():
-					if sh.mouseIsOver:
-						sh.setSelected(not sh.selected)
-						toggled = True
-			else:
-				for sh in self.getGalvoShapes():
-					if sh.mouseIsOver:
-						sh.setSelected(True)
-						toggled = True
-					elif sh.selected:
-						sh.setSelected(False)
-						
-			self.sigSelectionChanged.emit()
-			if not toggled:					# if none are selected, create a new shape
-				if self.drawMethod == "ROI":
-					self.cur_shape = GalvoShape(ev.scenePos())
-				else:
-					self.cur_shape = GalvoLine(ev.scenePos())
+			if self.drawMethod == "ROI":
+				self.cur_shape = GalvoShape(ev.scenePos())
 				self.addItem(self.cur_shape)
+			elif self.drawMethod == "Line":
+				if self.drawing_line:
+					self.line.setEnd(ev.scenePos())
+					self.drawing_line = False
+				else:
+					self.line.setStart(ev.scenePos())
+					self.drawing_line = True
+			elif self.drawMethod == "Point":
+				self.crosshair.setPos(ev.scenePos())
+			
 
 	def mouseMoveEvent(self, ev):
 		if self.crosshair.dragging:	#ignore shapes if dragging crosshair
 			self.crosshair.setPos(ev.scenePos())
-		elif hasattr(self, 'cur_shape'):
+		elif hasattr(self, 'cur_shape') and self.drawMethod == 'ROI':
 			self.cur_shape.addPoint(ev.scenePos())
-		else:
-			for sh in self.getGalvoShapes():
-				sh.mouseOver(ev.scenePos())
+		elif self.drawMethod == 'Line':
+			if self.drawing_line:
+				self.line.setEnd(ev.scenePos())
 		QtGui.QGraphicsScene.mouseMoveEvent(self, ev)
 
 	def mouseReleaseEvent(self, ev):
-		if self.crosshair.dragging:
-			self.crosshair.dragging = False
-		elif hasattr(self, 'cur_shape'):
-			if self.drawMethod == 'ROI':
+		if ev.button() == QtCore.Qt.RightButton:
+			if self.crosshair.dragging:
+				self.crosshair.dragging = False
+			elif self.drawMethod == 'ROI':
 				self.cur_shape.close()
-			del self.cur_shape
+				self.rois.append(self.cur_shape)
+				del self.cur_shape
 		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
-
-	def keyPressEvent(self, ev):
-		if ev.key() == 16777223:
-			for sh in self.getGalvoShapes()[::-1]:
-				if sh.selected:
-					self.removeItem(sh)
-					self.sigSelectionChanged.emit()
 
 	def clear(self):
 		for i in self.items()[::-1]:
@@ -116,9 +119,8 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.crosshair.setVisible(True)
 		self.sigSelectionChanged.emit()
 
-	def reset(self):
+	def resetBounds(self):
 		self.galvo.setBounds(QtCore.QRect(-10, -10, 20, 20))
-		self.crosshair.setVisible(True)
 		self.center()
 
 	def mapFromGalvo(self, pt):
@@ -154,6 +156,10 @@ class GalvoBase(QtCore.QThread):
 	def setBounds(self, boundRect):
 		self.boundRect = boundRect
 		
+class DebugDriver():
+	def __getattr__(self, attr):
+		print(attr)
+		return print
 
 class GalvoDriver(GalvoBase):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
@@ -163,15 +169,20 @@ class GalvoDriver(GalvoBase):
 		super(GalvoDriver, self).__init__()
 		self.sample_rate=5000 # Maximum for the NI PCI-6001 is 5kHz.
 		self.bufferSize=2
-		self.read = int32()
-		self.establishChannels()
+		if not g.DEBUG:
+			self.read = int32()
+			self.establishChannels()
+		else:
+			self.read = 'int32'
+			self.analog_output = DebugDriver()
+			self.digital_output = DebugDriver()
 
 	def establishChannels(self):
 		self.analog_output = Task()
-		self.analog_output.CreateAOVoltageChan(b'Dev3/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
-		self.analog_output.CreateAOVoltageChan(b"Dev3/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b'Dev1/ao0',b"",-10.0,10.0,DAQmx_Val_Volts,None)
+		self.analog_output.CreateAOVoltageChan(b"Dev1/ao1",b"",-10.0,10.0,DAQmx_Val_Volts,None)
 		self.digital_output = Task()
-		self.digital_output.CreateDOChan(b'Dev3/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
+		self.digital_output.CreateDOChan(b'Dev1/port0/line0:7',b"",DAQmx_Val_ChanForAllLines)
 		#self.analog_output.CfgSampClkTiming("", 50, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) 
 
 	def setLaserActive(self, num, active):
@@ -188,13 +199,15 @@ class GalvoDriver(GalvoBase):
 		if any(digital_data) and len(self.shapes) > 0 and not self.isRunning():
 			self.start()
 
-	def timedDraw(self, points, totalTime):
-		pps = int(1. / totalTime * len(points))
-		print("Drawing %d points at %d points per second" % (len(points), pps))
+	def timedDraw(self, path, totalTime):
+		pointCount = path.length() / 5
+		points = [path.pointAtPercent(i) for i in np.linspace(0., 1., pointCount)]
+		pts = []
 		for p in points:
-			self.moveTo(p)
-			time.sleep(1. / pps)
-			QtGui.QApplication.processEvents()
+			pts.append(self.mapFromPercent(p))
+		data = np.array([p.y() for p in pts] + [-p.x() for p in pts], dtype=np.float64) # sent as (y, -x)
+		samps = len(data)//2
+		self.analog_output.WriteAnalogF64(samps,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 
 	def run(self):
 		while len(self.shapes) > 0 and (self.lasers[0].active or self.lasers[1].active):
