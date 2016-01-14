@@ -1,5 +1,6 @@
 from PyQt4 import uic, QtCore
 import GalvoDriver
+import pickle, sys
 ui = None
 scene = None
 DEBUG = False
@@ -55,6 +56,8 @@ def initUiAndScene(filename):
 	ui = uic.loadUi(filename)
 	scene = GalvoDriver.GalvoScene()
 	ui.graphicsView.setScene(scene)
+	ui.showEvent = onOpen
+	ui.closeEvent = onClose
 	scene.setSceneRect(QtCore.QRectF(ui.graphicsView.rect()))
 
 	return ui, scene

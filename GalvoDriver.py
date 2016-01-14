@@ -8,13 +8,18 @@ if not g.DEBUG:
 		from PyDAQmx import *
 		from PyDAQmx.DAQmxCallBack import *
 	except:
-		DAQmx_Val_Volts = 'DAQmx_Val_Volts'
-		DAQmx_Val_ChanForAllLines = 'DAQmx_Val_ChanForAllLines'
-		DAQmx_Val_GroupByChannel = "DAQmx_Val_GroupByChannel"
-		print("Could not import PyDAQmx. Running in Debug mode")
-		def byref(s):
-			return "ref(%s)" % s
 		g.DEBUG = True
+
+def byref_str(s):
+	return "ref(%s)" % s
+
+if g.DEBUG:
+	DAQmx_Val_Volts = 'DAQmx_Val_Volts'
+	DAQmx_Val_ChanForAllLines = 'DAQmx_Val_ChanForAllLines'
+	DAQmx_Val_GroupByChannel = "DAQmx_Val_GroupByChannel"
+	print("Could not import PyDAQmx. Running in Debug mode")
+byref = byref_str
+
 import time
 
 class Laser(QtCore.QObject):
@@ -33,7 +38,6 @@ class Laser(QtCore.QObject):
 		self.pin = p
 		
 class GalvoScene(QtGui.QGraphicsScene):
-	sigSelectionChanged = QtCore.pyqtSignal()
 	def __init__(self, **kargs):
 		super(GalvoScene, self).__init__(**kargs)
 		self.crosshair = CrossHair()
@@ -75,6 +79,7 @@ class GalvoScene(QtGui.QGraphicsScene):
 			elif self.drawMethod =='ROI':
 				for i in range(len(self.rois) - 1, -1, -1):
 					if self.rois[i].mouseOver(ev.scenePos()):
+						self.removeItem(self.rois[i])
 						self.rois.pop(i)
 			QtGui.QGraphicsScene.mousePressEvent(self, ev)
 		elif ev.button() == QtCore.Qt.LeftButton:	# draw shapes
@@ -106,7 +111,13 @@ class GalvoScene(QtGui.QGraphicsScene):
 		if ev.button() == QtCore.Qt.RightButton:
 			if self.crosshair.dragging:
 				self.crosshair.dragging = False
-			elif self.drawMethod == 'ROI':
+			elif self.drawMethod == 'ROI' and hasattr(self, 'cur_shape'):
+				self.cur_shape.close()
+				if len(self.cur_shape.rasterPoints()) > 5:
+					self.rois.append(self.cur_shape)
+				del self.cur_shape
+		elif ev.button() == QtCore.Qt.LeftButton:
+			if self.drawMethod == 'ROI' and hasattr(self, 'cur_shape'):
 				self.cur_shape.close()
 				self.rois.append(self.cur_shape)
 				del self.cur_shape
@@ -116,8 +127,7 @@ class GalvoScene(QtGui.QGraphicsScene):
 		for i in self.items()[::-1]:
 			if isinstance(i, GalvoLine):
 				self.removeItem(i)
-		self.crosshair.setVisible(True)
-		self.sigSelectionChanged.emit()
+		self.rois = []
 
 	def resetBounds(self):
 		self.galvo.setBounds(QtCore.QRect(-10, -10, 20, 20))
@@ -232,6 +242,7 @@ class GalvoDriver(GalvoBase):
 		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 		if penUp:
 			self.updateDigital()
+		g.ui.statusBar().showMessage("Crosshair at position (%.3f, %.3f)" % (self.pos.x(), self.pos.y()))
 
 	def write_points(self, points):
 		self.analog_output.StopTask()

@@ -48,7 +48,6 @@ def pulsePressed(num):
 		scene.galvo.setLaserActive(num, True)
 		t = time.time()
 		to_pt(0)
-		#Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
 	else:
 		scene.galvo.setLaserActive(num, True)
 		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
@@ -121,8 +120,8 @@ def connectUi():
 	ui.actionRename.triggered.connect(rename_lasers)
 	ui.actionEditRaster.triggered.connect(changeRasterShift)
 	ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
-	ui.actionImport.triggered.connect(lambda : g.import_settings(QtGui.QFileDialog.askOpenFilename(filter='Pickled files (*.p)')))
-	ui.actionExport.triggered.connect(lambda : g.export_settings(QtGui.QFileDialog.askSaveFilename(filter='Pickled files (*.p)')))
+	ui.actionImport.triggered.connect(lambda : g.import_settings(QtGui.QFileDialog.getOpenFileName(filter='Pickled files (*.p)')))
+	ui.actionExport.triggered.connect(lambda : g.export_settings(QtGui.QFileDialog.getSaveFileName(filter='Pickled files (*.p)')))
 	
 	scene.galvo.lasers[0].sigRenamed.connect(ui.laser1Button.setText)
 	scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)

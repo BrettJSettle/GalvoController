@@ -100,7 +100,9 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
-		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		#QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		painter.setPen(QtGui.QColor(0, 0, 255))
+		painter.drawPoints(*self.rasterPoints())
 		painter.setPen(QtGui.QColor(0, 255, 0))
 		painter.drawText(self.start.x(), self.start.y(), 'S')
 		painter.setPen(QtGui.QColor(255, 0, 0))
@@ -127,7 +129,7 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 		self.update()
 
 	def rasterPoints(self):
-		return [self.path.pointAtPercent(i / float(g.line_intervals)) for i in range(g.line_intervals)]
+		return [self.path.pointAtPercent(i / (g.line_intervals - 1.)) for i in range(g.line_intervals)]
 
 class GalvoShape(GalvoLine):
 	def __init__(self, pos):
