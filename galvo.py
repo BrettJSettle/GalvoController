@@ -34,13 +34,21 @@ def calibrate():
 	del scene.tempRect
 	scene.removeItem(ti)#('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
 
-
 def pulsePressed(num):
 	pulse_time = ui.pulseSpin.value() / 1000.0
 	if scene.drawMethod == 'Line':
+		pts = [scene.mapToGalvo(p) for p in scene.line.rasterPoints(g.line_intervals)]
+		def to_pt(i):
+			if i >= len(pts):
+				print(time.time() - t)
+				scene.galvo.setLaserActive(num, False)
+				return
+			scene.galvo.moveTo(pts[i])
+			Timer(pulse_time/g.line_intervals, lambda : to_pt(i + 1)).start()
 		scene.galvo.setLaserActive(num, True)
-		scene.galvo.write_points(scene.line.rasterPoints())
-		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
+		t = time.time()
+		to_pt(0)
+		#Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
 	else:
 		scene.galvo.setLaserActive(num, True)
 		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
