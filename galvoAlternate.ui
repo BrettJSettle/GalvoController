@@ -429,7 +429,6 @@ p, li { white-space: pre-wrap; }
     <addaction name="separator"/>
     <addaction name="actionConfigure"/>
     <addaction name="actionRename"/>
-    <addaction name="actionEditRaster"/>
    </widget>
    <addaction name="menuGalvo"/>
    <addaction name="menuSettings"/>

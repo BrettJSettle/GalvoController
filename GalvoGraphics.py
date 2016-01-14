@@ -86,7 +86,6 @@ class GalvoLine(QtGui.QGraphicsPathItem):
 		return [self.path.pointAtPercent(i / float(count)) for i in range(count)]
 
 class GalvoStraightLine(QtGui.QGraphicsPathItem):
-	RASTER_GAP = 10
 	def __init__(self, posA, posB):
 		self.path = QtGui.QPainterPath(posA)
 		self.path.lineTo(posB)
@@ -101,7 +100,11 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
 		#QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
-		painter.setPen(QtGui.QColor(0, 0, 255))
+		pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
+		pen.setWidth(4)
+		painter.setPen(pen)
+		f = QtGui.QFont('Arial', 13, weight=1)
+		painter.setFont(f)
 		painter.drawPoints(*self.rasterPoints())
 		painter.setPen(QtGui.QColor(0, 255, 0))
 		painter.drawText(self.start.x(), self.start.y(), 'S')
@@ -110,7 +113,7 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 
 	def boundingRect(self):
 		newRect = QtGui.QGraphicsPathItem.boundingRect(self)
-		newRect.adjust(-5, -5, 5, 5)
+		newRect.adjust(-10, -10, 10, 10)
 		return newRect
 
 	def setStart(self, p):
@@ -159,8 +162,8 @@ class GalvoShape(GalvoLine):
 		rect.addRect(r)	#create painterPath of the top of the boundRect
 		while rect.boundingRect().y() < self.path.boundingRect().bottom():	# while the y-val is above the boundRect
 			r = self.path.intersected(rect).boundingRect()
-			raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.left(), r.right(), GalvoShape.RASTER_GAP)])
-			rect.translate(0, GalvoShape.RASTER_GAP) #translate the raster down slightly
+			raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.left(), r.right(), g.ui.lineSepCounter.maximum() - g.line_intervals + 1)])
+			rect.translate(0, g.ui.lineSepCounter.maximum() - g.line_intervals + 1) #translate the raster down slightly
 		return raster
 
 	def rasterPath(self):

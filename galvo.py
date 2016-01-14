@@ -69,11 +69,6 @@ def selectionChanged():
 	scene.galvo.setShapes(ps)
 	scene.crosshair.setVisible(not any([shape.selected for shape in scene.getGalvoShapes()]))
 
-def changeRasterShift():
-	result, ok = QtGui.QInputDialog.getInt(ui, "Raster Shift", "Enter the shift in pixels to translate the laser when rastering polygons:", GalvoShape.RASTER_GAP, min=0)
-	if ok:
-		GalvoShape.RASTER_GAP = result
-
 def closeCommandPrompt():
     from ctypes import windll
     GetConsoleWindow = windll.kernel32.GetConsoleWindow
@@ -111,6 +106,8 @@ def connectUi():
 	ui.lineButton.pressed.connect(lambda : scene.setDrawMethod('Line'))
 	ui.pointButton.pressed.connect(lambda : scene.setDrawMethod('Point'))
 	ui.lineSepCounter.valueChanged.connect(lambda v: setattr(g, 'line_intervals', v))
+	ui.lineSepCounter.valueChanged.connect(lambda v: [roi.update() for roi in scene.rois] if scene.drawMethod == 'ROI' else scene.line.update())
+
 	ui.opacitySlider.valueChanged.connect(lambda v: ui.setWindowOpacity(v/100.))
 	ui.opacitySlider.setValue(85)
 
@@ -118,7 +115,6 @@ def connectUi():
 	ui.actionCalibrate.triggered.connect(calibrate)
 	ui.actionReset.triggered.connect(g.reset)
 	ui.actionRename.triggered.connect(rename_lasers)
-	ui.actionEditRaster.triggered.connect(changeRasterShift)
 	ui.actionDisconnect.triggered.connect(lambda : sys.exit(0))
 	ui.actionImport.triggered.connect(lambda : g.import_settings(QtGui.QFileDialog.getOpenFileName(filter='Pickled files (*.p)')))
 	ui.actionExport.triggered.connect(lambda : g.export_settings(QtGui.QFileDialog.getSaveFileName(filter='Pickled files (*.p)')))
