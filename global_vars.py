@@ -8,6 +8,7 @@ rois = []
 line = None
 line_intervals = 10
 pulse_time = 1000 # milliseconds
+timer = None
 
 def import_settings(fname):
 	with open(fname, 'rb') as f:
@@ -37,14 +38,13 @@ def onOpen(ev):
 		import_settings('settings.p')
 	except Exception as e:
 		print(e)
+	scene.galvo.setLaserActive((0, 1), False)
 
 def onClose(ev):
-	scene.galvo.setLaserActive(0, False)
-	scene.galvo.setLaserActive(1, False)
+	scene.galvo.setLaserActive((0, 1), False)
 	if ui.actionAutosave.isChecked():
 		export_settings('settings.p')
 	sys.exit(0)
-
 
 def reset():
 	ui.pointButton.click()

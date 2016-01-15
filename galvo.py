@@ -32,25 +32,28 @@ def calibrate():
 	scene.keyPressEvent = GalvoScene.keyPressEvent
 	scene.galvo.setBounds(scene.tempRect)
 	del scene.tempRect
-	scene.removeItem(ti)#('Calibrated, right click drag to position laser. Left click drag to draw ROIs')
+	scene.removeItem(ti)
 
 def pulsePressed(num):
+	if any([laser.active for laser in scene.galvo.lasers]):
+		return
 	pulse_time = ui.pulseSpin.value() / 1000.0
 	if scene.drawMethod == 'Line':
-		pts = [scene.mapToGalvo(p) for p in scene.line.rasterPoints(g.line_intervals)]
-		def to_pt(i):
-			if i >= len(pts):
-				print(time.time() - t)
-				scene.galvo.setLaserActive(num, False)
-				return
-			scene.galvo.moveTo(pts[i])
-			Timer(pulse_time/g.line_intervals, lambda : to_pt(i + 1)).start()
+		pts = [scene.mapToGalvo(p) for p in scene.line.rasterPoints()]
+		timers = [Timer(i * pulse_time/g.line_intervals, scene.galvo.moveTo, args = (pts[i],)) for i in range(len(pts))]
+		timers.append(Timer(pulse_time, scene.galvo.setLaserActive, args = (num, False)))
 		scene.galvo.setLaserActive(num, True)
-		t = time.time()
-		to_pt(0)
+		[ti.start() for ti in timers]
+	elif scene.drawMethod == 'ROI':
+		ps = []
+		for roi in scene.rois:
+			ps.extend([scene.mapToGalvo(p) for p in roi.rasterPoints()])
+		scene.galvo.setLaserActive(num, True)
+		Timer(pulse_time, scene.galvo.setLaserActive, args=(num, False)).start()
+		scene.galvo.write_points(ps)
 	else:
 		scene.galvo.setLaserActive(num, True)
-		Timer(pulse_time, lambda : scene.galvo.setLaserActive(num, False)).start()
+		Timer(pulse_time, scene.galvo.setLaserActive, args=(num, False)).start()
 
 def configure():
 	for laser in scene.galvo.lasers:
@@ -80,7 +83,8 @@ def pressed(num):
 	button = ui.laser1Button if num == 0 else ui.laser2Button
 	button.presstime = time.time()
 	if not button.isChecked():
-		scene.galvo.setLaserActive(num, True)
+		if scene.drawMethod == 'Point':
+			scene.galvo.setLaserActive(num, True)
 
 def released(num):
 	button = ui.laser1Button if num == 0 else ui.laser2Button
@@ -123,11 +127,13 @@ def connectUi():
 	scene.galvo.lasers[1].sigRenamed.connect(ui.laser2Button.setText)
 
 if __name__ == '__main__':
-    if os.name =='nt' and '-debug' not in sys.argv:
+    if os.name =='nt' and '-keepwindow' not in sys.argv:
         closeCommandPrompt()
-    else:
+    if '-debug' in sys.argv:
     	g.DEBUG = True
     ui, scene = g.initUiAndScene('galvoAlternate.ui')
     connectUi()
+    if g.DEBUG:
+    	ui.setWindowTitle("DEBUG MODE")
     ui.show()
     app.exec_() 

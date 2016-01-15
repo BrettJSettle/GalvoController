@@ -18,7 +18,7 @@ if g.DEBUG:
 	DAQmx_Val_ChanForAllLines = 'DAQmx_Val_ChanForAllLines'
 	DAQmx_Val_GroupByChannel = "DAQmx_Val_GroupByChannel"
 	print("Could not import PyDAQmx. Running in Debug mode")
-byref = byref_str
+	byref = byref_str
 
 import time
 
@@ -53,6 +53,12 @@ class GalvoScene(QtGui.QGraphicsScene):
 		self.drawMethod = 'Point'
 
 	def setDrawMethod(self, s):
+		if s != self.drawMethod:
+			self.galvo.setLaserActive((0, 1), False)
+			g.ui.laser1Button.setChecked(False)
+			g.ui.laser2Button.setChecked(False)
+		else:
+			return
 		self.drawMethod = s
 		self.crosshair.setVisible(s == 'Point')
 		self.line.setVisible(s == 'Line')
@@ -121,6 +127,9 @@ class GalvoScene(QtGui.QGraphicsScene):
 				self.cur_shape.close()
 				self.rois.append(self.cur_shape)
 				del self.cur_shape
+			elif self.drawMethod == 'Line' and (ev.scenePos() - self.line.start).manhattanLength() > 5:
+				self.line.setEnd(ev.scenePos())
+				self.drawing_line = False
 		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
 
 	def clear(self):
@@ -151,7 +160,6 @@ class GalvoBase(QtCore.QThread):
 	'''implementation of Galvo Driver that sends one coordinate at a time similar to a QGraphicsObject,
 	handles maximum and minimum values accordingly'''
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
-	sigMoved = QtCore.pyqtSignal(object)
 	def __init__(self):
 		super(GalvoBase, self).__init__()
 		self.lasers = [Laser('Laser 1', 0), Laser('Laser 2', 1)]
@@ -196,7 +204,11 @@ class GalvoDriver(GalvoBase):
 		#self.analog_output.CfgSampClkTiming("", 50, DAQmx_Val_Rising, DAQmx_Val_ContSamps, self.bufferSize) 
 
 	def setLaserActive(self, num, active):
-		self.lasers[num].setActive(active)
+		if type(num) in (list, tuple):
+			for n in num:
+				self.lasers[n].setActive(active)
+		else:
+			self.lasers[num].setActive(active)
 		self.updateDigital()
 
 	def updateDigital(self, active=True):
@@ -235,14 +247,13 @@ class GalvoDriver(GalvoBase):
 	def moveTo(self, pos, penUp=False):
 		pos = self.mapFromPercent(pos)
 		self.pos = pos
-		self.sigMoved.emit(pos)
 		if penUp:
 			self.updateDigital(active=False)
 		data = np.array([pos.y(), pos.y(), -pos.x(), -pos.x()], dtype=np.float64)
 		self.analog_output.WriteAnalogF64(self.bufferSize,1,-1,DAQmx_Val_GroupByChannel,data,byref(self.read),None)
 		if penUp:
 			self.updateDigital()
-		g.ui.statusBar().showMessage("Crosshair at position (%.3f, %.3f)" % (self.pos.x(), self.pos.y()))
+		#g.ui.statusBar().showMessage("Crosshair at position (%.3f, %.3f)" % (self.pos.x(), self.pos.y()))
 
 	def write_points(self, points):
 		self.analog_output.StopTask()
