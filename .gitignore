@@ -42,3 +42,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 *.pyc
+
+build
+*.egg-info
+dist

@@ -1,0 +1,2 @@
+recursive-include GalvoController *.ui *.png *.ico
+include README.rst

@@ -1,17 +1,18 @@
-from PyQt4 import QtGui, QtCore
+from qtpy import QtWidgets, QtGui, QtCore
 import numpy as np
-import global_vars as g
+from . import global_vars as g
 
-class CrossHair(QtGui.QGraphicsObject):
+class CrossHair(QtWidgets.QGraphicsObject):
 	'''draggable crosshair object that acts as an aimer in a QGraphics Scene'''
-	sigMoved = QtCore.pyqtSignal(object)
+	sigMoved = QtCore.Signal(object)
 	def __init__(self, parent=None, size=7, color = QtCore.Qt.red, pos=QtCore.QPointF(0, 0)):
-		QtGui.QGraphicsObject.__init__(self, parent)
+		QtWidgets.QGraphicsObject.__init__(self, parent)
 		self.pen = QtGui.QPen(color)
 		self.pen.setWidth(2)
 		self.setZValue(10)
 		self.setPos(pos)
 		self.size = size
+		self.dragging = False
 		self.newPos = [None, None]
 		self.xChanged.connect(lambda : self.setCoord(x=self.pos().x))
 		self.yChanged.connect(lambda: self.setCoord(y=self.pos().y))
@@ -35,10 +36,11 @@ class CrossHair(QtGui.QGraphicsObject):
 
 	def boundingRect(self):
 		'''shape to draw in'''
-		return QtCore.QRectF(-self.size - 1, -self.size - 1, 2 * self.size + 1, 2 * self.size + 1)
+		return QtCore.QRectF(-self.size - 1, -self.size - 1, 2 * self.size + 2, 2 * self.size + 2)
 
-class GalvoLine(QtGui.QGraphicsPathItem):
-	RASTER_GAP = 10
+
+
+class GalvoLine(QtWidgets.QGraphicsPathItem):
 	def __init__(self, pos):
 		self.path = QtGui.QPainterPath(pos)
 		super(GalvoLine, self).__init__(self.path)
@@ -53,14 +55,14 @@ class GalvoLine(QtGui.QGraphicsPathItem):
 	def paint(self, painter, option, *arg):
 		if self.visible:
 			painter.setRenderHint(QtGui.QPainter.Antialiasing)
-			QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+			QtWidgets.QGraphicsPathItem.paint(self, painter, option, *arg)
 			painter.setPen(QtGui.QColor(0, 255, 0))
 			painter.drawText(self.start.x(), self.start.y(), 'S')
 			painter.setPen(QtGui.QColor(255, 0, 0))
 			painter.drawText(self.end.x(), self.end.y(), 'E')
 
 	def boundingRect(self):
-		newRect = QtGui.QGraphicsPathItem.boundingRect(self)
+		newRect = QtWidgets.QGraphicsPathItem.boundingRect(self)
 		newRect.adjust(-5, -5, 5, 5)
 		return newRect
 
@@ -85,7 +87,7 @@ class GalvoLine(QtGui.QGraphicsPathItem):
 	def rasterPoints(self, count):
 		return [self.path.pointAtPercent(i / float(count)) for i in range(count)]
 
-class GalvoStraightLine(QtGui.QGraphicsPathItem):
+class GalvoStraightLine(QtWidgets.QGraphicsPathItem):
 	def __init__(self, posA, posB):
 		self.path = QtGui.QPainterPath(posA)
 		self.path.lineTo(posB)
@@ -96,6 +98,7 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 		path_pen.setWidth(2)
 		self.setPen(path_pen)
 		self.setPath(self.path)
+		self.midDraw = False
 
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
@@ -104,6 +107,7 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 		pen.setWidth(4)
 		painter.setPen(pen)
 		f = QtGui.QFont('Arial', 13, weight=1)
+		f.setBold(True)
 		painter.setFont(f)
 		painter.drawPoints(*self.rasterPoints())
 		painter.setPen(QtGui.QColor(0, 255, 0))
@@ -112,7 +116,7 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 		painter.drawText(self.end.x(), self.end.y(), 'E')
 
 	def boundingRect(self):
-		newRect = QtGui.QGraphicsPathItem.boundingRect(self)
+		newRect = QtWidgets.QGraphicsPathItem.boundingRect(self)
 		newRect.adjust(-10, -10, 10, 10)
 		return newRect
 
@@ -123,16 +127,19 @@ class GalvoStraightLine(QtGui.QGraphicsPathItem):
 		self.path.lineTo(self.end)
 		self.setPath(self.path)
 		self.update()
+		self.midDraw = True
 
-	def setEnd(self, e):
+	def setEnd(self, e, finish=False):
 		self.end = e
 		self.path = QtGui.QPainterPath(self.start)
 		self.path.lineTo(self.end)
 		self.setPath(self.path)
 		self.update()
+		if finish:
+			self.midDraw = False
 
 	def rasterPoints(self):
-		return [self.path.pointAtPercent(i / (g.line_intervals - 1.)) for i in range(g.line_intervals)]
+		return [self.path.pointAtPercent(i / (g.intervals - 1.)) for i in range(g.intervals)]
 
 class GalvoShape(GalvoLine):
 	def __init__(self, pos):
@@ -140,10 +147,12 @@ class GalvoShape(GalvoLine):
 
 	def paint(self, painter, option, *arg):
 		painter.setRenderHint(QtGui.QPainter.Antialiasing)
-		QtGui.QGraphicsPathItem.paint(self, painter, option, *arg)
+		QtWidgets.QGraphicsPathItem.paint(self, painter, option, *arg)
 		ps = self.rasterPoints()
 		if len(ps) > 0:
-			painter.drawPoints(*ps)
+			painter.drawPolyline(*ps)
+			#painter.drawLines(*ps)
+			#painter.drawPoints(*ps)
 
 	def mouseOver(self, pos):
 		self.mouseIsOver = self.path.contains(pos)
@@ -160,10 +169,18 @@ class GalvoShape(GalvoLine):
 		r.setHeight(1)
 		rect = QtGui.QPainterPath()
 		rect.addRect(r)	#create painterPath of the top of the boundRect
+		i = 0
+		step = g.ui.lineSepCounter.maximum() - g.intervals + 1
+		step = g.intervals
 		while rect.boundingRect().y() < self.path.boundingRect().bottom():	# while the y-val is above the boundRect
 			r = self.path.intersected(rect).boundingRect()
-			raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.left(), r.right(), g.ui.lineSepCounter.maximum() - g.line_intervals + 1)])
-			rect.translate(0, g.ui.lineSepCounter.maximum() - g.line_intervals + 1) #translate the raster down slightly
+			if i % 2 == 0:
+				raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.left(), r.right(), step)])
+			else:
+				raster.extend([QtCore.QPointF(x, r.top()) for x in np.arange(r.right(), r.left(), -step)])
+
+			rect.translate(0, step) #translate the raster down slightly
+			i += 1
 		return raster
 
 	def rasterPath(self):

@@ -1,29 +1,34 @@
-from PyQt4 import QtGui, QtCore
+from qtpy import QtGui, QtCore, QtWidgets
 import numpy as np
-from GalvoGraphics import *
+from .galvoGraphics import *
 import sys
-import global_vars as g
-if not g.DEBUG:
+from . import global_vars as g
+
+def byref_str(s):
+	''' Duplicate function used for debug mode
+	'''
+	return "ref(%s)" % s
+
+if not g.DEBUG:  # try to import PyDAQmx and connect to machine. On fail, enter DEBUG MODE
 	try:
 		from PyDAQmx import *
 		from PyDAQmx.DAQmxCallBack import *
 	except:
+		print("Could not import PyDAQmx. Running in Debug mode")
 		g.DEBUG = True
 
-def byref_str(s):
-	return "ref(%s)" % s
-
-if g.DEBUG:
+if g.DEBUG:	# set values if PyDAQmx failed
 	DAQmx_Val_Volts = 'DAQmx_Val_Volts'
 	DAQmx_Val_ChanForAllLines = 'DAQmx_Val_ChanForAllLines'
 	DAQmx_Val_GroupByChannel = "DAQmx_Val_GroupByChannel"
-	print("Could not import PyDAQmx. Running in Debug mode")
 	byref = byref_str
 
 import time
 
 class Laser(QtCore.QObject):
-	sigRenamed = QtCore.pyqtSignal(str)
+	''' Represents a laser connected to the USB-6001. Stores laser name, pin number, and state
+	'''
+	sigRenamed = QtCore.Signal(str)
 	def __init__(self, name, pin):
 		super(Laser, self).__init__()
 		self.name = name
@@ -36,34 +41,22 @@ class Laser(QtCore.QObject):
 		self.sigRenamed.emit(s)
 	def changePin(self, p):
 		self.pin = p
-		
-class GalvoScene(QtGui.QGraphicsScene):
+	
+class GalvoScene(QtWidgets.QGraphicsScene):
+	''' Interactive area on GUI for crosshair and ROI control
+	'''
 	def __init__(self, **kargs):
 		super(GalvoScene, self).__init__(**kargs)
+		self.galvo = GalvoDriver()
 		self.crosshair = CrossHair()
 		self.crosshair.sigMoved.connect(self.crosshairMoved)
 		self.addItem(self.crosshair)
-		self.line = GalvoStraightLine(QtCore.QPointF(0, 0), QtCore.QPointF(0, 0))
+		self.line = GalvoStraightLine(QtCore.QPointF(-100, 0), QtCore.QPointF(0, 0))
 		self.line.setVisible(False)
 		self.addItem(self.line)
-		self.rois = []
-		self.galvo = GalvoDriver()
-		self.crosshair.dragging = False
-		self.drawing_line = False
 		self.drawMethod = 'Point'
-
-	def setDrawMethod(self, s):
-		if s != self.drawMethod:
-			self.galvo.setLaserActive((0, 1), False)
-			g.ui.laser1Button.setChecked(False)
-			g.ui.laser2Button.setChecked(False)
-		else:
-			return
-		self.drawMethod = s
-		self.crosshair.setVisible(s == 'Point')
-		self.line.setVisible(s == 'Line')
-		for roi in self.rois:
-			roi.setVisible(s == 'ROI')
+		self.rois = []
+		self.currentROI = None
 
 	def crosshairMoved(self, pos):
 		pos = self.mapToGalvo(pos)
@@ -72,68 +65,77 @@ class GalvoScene(QtGui.QGraphicsScene):
 			pos.setY(min(1, max(0, pos.y())))
 			self.crosshair.setPos(self.views()[0].mapToScene(self.views()[0].width() * pos.x(), self.views()[0].height() * pos.y()))
 		self.galvo.moveTo(pos)
-	
+
+	def setDrawMethod(self, method):
+		self.drawMethod = method
+		self.crosshair.setVisible(method == 'Point')
+		for roi in self.rois:
+			roi.setVisible(method == 'ROI')
+		self.line.setVisible(method == 'Line' and self.line.start.x() != -100)
+
+		g.ui.laser1Button.setEnabled(method == 'Point')
+		g.ui.laser2Button.setEnabled(method == 'Point')
+
+
+		g.ui.intervalTypeLabel.setText("Line Intervals:" if method == 'Line' else 'Mesh Size:')
+
+	def mousePressEvent(self, ev):
+		if self.drawMethod =='Point':
+			self.crosshair.setPos(ev.scenePos())
+			self.crosshair.dragging = ev.button() == QtCore.Qt.RightButton
+		else:
+			if ev.button() == QtCore.Qt.RightButton:  # if right button, enable crosshair movement
+				if self.drawMethod =='ROI':
+					for i in range(len(self.rois) - 1, -1, -1):
+						if self.rois[i].mouseOver(ev.scenePos()):
+							self.removeItem(self.rois[i])
+							self.rois.pop(i)
+			elif ev.button() == QtCore.Qt.LeftButton:
+				if self.drawMethod == "ROI":
+					self.currentROI = GalvoShape(ev.scenePos())
+					self.addItem(self.currentROI)
+				elif self.drawMethod == "Line":
+					self.line.setVisible(True)
+					if not self.line.midDraw:
+						self.line.setStart(ev.scenePos())
+					else:
+						self.line.setEnd(ev.scenePos(), finish=True)
+		QtWidgets.QGraphicsScene.mousePressEvent(self, ev)
+
+	def mouseMoveEvent(self, ev):
+		if self.drawMethod == 'Point' and self.crosshair.dragging:
+			self.crosshair.setPos(ev.scenePos())
+		elif isinstance(self.currentROI, GalvoShape):
+			self.currentROI.addPoint(ev.scenePos())
+		elif self.line.midDraw:
+			self.line.setEnd(ev.scenePos())
+
+		QtWidgets.QGraphicsScene.mouseMoveEvent(self, ev)
+
+	def mouseReleaseEvent(self, ev):
+		self.crosshair.dragging = False
+		if ev.button() == QtCore.Qt.RightButton:
+			pass
+		elif ev.button() == QtCore.Qt.LeftButton:
+			if isinstance(self.currentROI, GalvoShape):
+				self.currentROI.close()
+				if self.currentROI.path.length() > 50:
+					self.rois.append(self.currentROI)
+				else:
+					self.removeItem(self.currentROI)
+			if self.line.midDraw:
+				if (ev.scenePos() - self.line.start).manhattanLength() > 5:
+					self.line.setEnd(ev.scenePos(), finish=True)
+
+		self.currentROI = None
+		QtWidgets.QGraphicsScene.mouseReleaseEvent(self, ev)
+
 	def center(self):
 		self.setDrawMethod("Point")
 		self.crosshair.setPos(self.views()[0].mapToScene(self.views()[0].width() * .5, self.views()[0].height() * .5))
 
-	def mousePressEvent(self, ev):
-		if ev.button() == QtCore.Qt.RightButton:  # if right button, enable crosshair movement
-			if self.drawMethod =='Point':
-				self.crosshair.setPos(ev.scenePos())
-				self.crosshair.dragging = True
-			elif self.drawMethod =='ROI':
-				for i in range(len(self.rois) - 1, -1, -1):
-					if self.rois[i].mouseOver(ev.scenePos()):
-						self.removeItem(self.rois[i])
-						self.rois.pop(i)
-			QtGui.QGraphicsScene.mousePressEvent(self, ev)
-		elif ev.button() == QtCore.Qt.LeftButton:	# draw shapes
-			if self.drawMethod == "ROI":
-				self.cur_shape = GalvoShape(ev.scenePos())
-				self.addItem(self.cur_shape)
-			elif self.drawMethod == "Line":
-				if self.drawing_line:
-					self.line.setEnd(ev.scenePos())
-					self.drawing_line = False
-				else:
-					self.line.setStart(ev.scenePos())
-					self.drawing_line = True
-			elif self.drawMethod == "Point":
-				self.crosshair.setPos(ev.scenePos())
-			
-
-	def mouseMoveEvent(self, ev):
-		if self.crosshair.dragging:	#ignore shapes if dragging crosshair
-			self.crosshair.setPos(ev.scenePos())
-		elif hasattr(self, 'cur_shape') and self.drawMethod == 'ROI':
-			self.cur_shape.addPoint(ev.scenePos())
-		elif self.drawMethod == 'Line':
-			if self.drawing_line:
-				self.line.setEnd(ev.scenePos())
-		QtGui.QGraphicsScene.mouseMoveEvent(self, ev)
-
-	def mouseReleaseEvent(self, ev):
-		if ev.button() == QtCore.Qt.RightButton:
-			if self.crosshair.dragging:
-				self.crosshair.dragging = False
-			elif self.drawMethod == 'ROI' and hasattr(self, 'cur_shape'):
-				self.cur_shape.close()
-				if len(self.cur_shape.rasterPoints()) > 5:
-					self.rois.append(self.cur_shape)
-				del self.cur_shape
-		elif ev.button() == QtCore.Qt.LeftButton:
-			if self.drawMethod == 'ROI' and hasattr(self, 'cur_shape'):
-				self.cur_shape.close()
-				self.rois.append(self.cur_shape)
-				del self.cur_shape
-			elif self.drawMethod == 'Line' and (ev.scenePos() - self.line.start).manhattanLength() > 5:
-				self.line.setEnd(ev.scenePos())
-				self.drawing_line = False
-		QtGui.QGraphicsScene.mouseReleaseEvent(self, ev)
-
 	def clear(self):
-		for i in self.items()[::-1]:
+		for i in self.rois:
 			if isinstance(i, GalvoLine):
 				self.removeItem(i)
 		self.rois = []
@@ -162,7 +164,7 @@ class GalvoBase(QtCore.QThread):
 	boundRect = QtCore.QRectF(-10, -10, 20, 20)
 	def __init__(self):
 		super(GalvoBase, self).__init__()
-		self.lasers = [Laser('Laser 1', 0), Laser('Laser 2', 1)]
+		self.lasers = (Laser('Laser 1', 0), Laser('Laser 2', 1))
 		self.shapes = []
 		self.duration = -1
 
@@ -245,6 +247,10 @@ class GalvoDriver(GalvoBase):
 		return QtCore.QPointF(max(-10, min(p[0], 10)),  max(-10, min(p[1], 10)))
 
 	def moveTo(self, pos, penUp=False):
+		''' Send the new position to the galvonmeter
+		Parameters:
+			pos: new XY coordinate of the crosshair, within range
+		'''
 		pos = self.mapFromPercent(pos)
 		self.pos = pos
 		if penUp:
